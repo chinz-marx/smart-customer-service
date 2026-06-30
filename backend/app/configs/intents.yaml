@@ -1,0 +1,88 @@
+intents:
+  reward_not_received:
+    name: 奖励未到账
+    keywords:
+      - 奖励
+      - 到账
+      - 返现
+      - 返利
+      - 活动奖励
+    priority_keywords:
+      - 奖励未到账
+      - 返现未到账
+      - 返利未到账
+    suggestions:
+      - 查看我的奖励
+      - 活动规则有哪些?
+      - 联系人工客服
+    slots:
+      order_id:
+        name: 订单号
+        ask_prompt: 请提供订单号，我帮您查询奖励到账情况。
+        validation: "^[A-Za-z0-9_-]{6,64}$"
+      activity_name:
+        name: 活动名称
+        ask_prompt: 请提供活动名称，比如618消费返现、拉新奖励等。
+      phone_tail:
+        name: 手机号后四位
+        ask_prompt: 请提供手机号后四位，方便我帮您定位。
+        validation: "^\\d{4}$"
+    ready_policy:
+      type: any_of
+      slots:
+        - order_id
+        - activity_name
+        - phone_tail
+    tool: reward_query
+
+  points_query:
+    name: 积分查询
+    keywords:
+      - 积分
+      - 分值
+      - 兑换
+    priority_keywords:
+      - 查询积分
+      - 积分明细
+    suggestions:
+      - 积分如何获得?
+      - 积分怎么使用?
+      - 积分有效期多久?
+    slots:
+      phone_tail:
+        name: 手机号后四位
+        ask_prompt: 请提供手机号后四位，方便我帮您定位积分账户。
+        validation: "^\\d{4}$"
+      user_id:
+        name: 用户ID
+        ask_prompt: 请提供用户ID或手机号后四位，方便我帮您查询积分。
+    ready_policy:
+      type: any_of
+      slots:
+        - phone_tail
+        - user_id
+    tool: points_query
+
+  human_handoff:
+    name: 转人工
+    keywords:
+      - 人工
+      - 客服
+      - 投诉
+      - 差评
+      - 转人
+    priority_keywords:
+      - 转人工
+      - 真人客服
+      - 人工客服
+      - 投诉
+      - 差评
+    suggestions:
+      - 继续描述问题
+      - 查看处理进度
+      - 返回智能客服
+    slots: {}
+    ready_policy:
+      type: none
+      slots: []
+    tool: human_handoff

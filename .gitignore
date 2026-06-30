@@ -1,0 +1,58 @@
+# Environment and secrets
+.env
+.env.*
+!.env.example
+backend/.env
+backend/.env.*
+!backend/.env.example
+
+# Python backend
+backend/.venv/
+backend/.pytest_cache/
+backend/.mypy_cache/
+backend/.ruff_cache/
+backend/.coverage
+backend/htmlcov/
+backend/__pycache__/
+backend/**/__pycache__/
+backend/**/*.py[cod]
+backend/**/*.pyo
+backend/**/*.pyd
+backend/*.log
+backend/*-server.log
+backend/*-server.err.log
+
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/.pnpm-store/
+frontend/.vite/
+frontend/.vite-temp/
+frontend/.vue-global-types/
+frontend/*.log
+frontend/vite.*.log
+
+# Repo/runtime generated caches
+.vite/
+.pytest_cache/
+__pycache__/
+**/__pycache__/
+*.py[cod]
+*.log
+
+# Codex/local agent metadata
+.agents/
+.codex/
+
+# IDE/editor
+.idea/
+**/.idea/
+.vscode/
+**/.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
