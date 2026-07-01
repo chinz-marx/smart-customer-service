@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from app.errors import safe_error_message
 from app.tools.points_tool import PointsQueryTool
 from app.tools.reward_tool import RewardQueryTool
 from app.tools.schemas import ToolRequest, ToolResult
@@ -18,7 +19,10 @@ class ToolRegistry:
         }
 
     async def call(self, tool_name: str | None, request: ToolRequest) -> ToolResult | None:
-        """根据工具名调用对应工具。"""
+        """根据工具名调用对应工具。
+
+        工具异常会在这里被捕获并转成 ToolResult，避免直接打断整条客服链路。
+        """
         if not tool_name:
             return None
 
@@ -26,4 +30,11 @@ class ToolRegistry:
         if not tool:
             return ToolResult.skipped(tool_name, f"工具 {tool_name} 尚未注册。")
 
-        return await tool.call(request)
+        try:
+            return await tool.call(request)
+        except Exception as exc:
+            return ToolResult.failed(
+                tool_name=tool_name,
+                message=safe_error_message(exc),
+                error_type=exc.__class__.__name__,
+            )

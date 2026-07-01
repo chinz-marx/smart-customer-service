@@ -29,6 +29,10 @@ class ChatTrace:
     tool_name: str | None = None
     tool_success: bool | None = None
     tool_error_code: str | None = None
+    failed_stage: str | None = None
+    error_type: str | None = None
+    error_message: str | None = None
+    fallback_used: bool = False
     emotion: str = "normal"
     sensitive: bool = False
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
@@ -37,7 +41,7 @@ class ChatTrace:
 def log_chat_trace(trace: ChatTrace) -> None:
     """输出一条 JSON 格式的聊天链路日志。
 
-    ensure_ascii=False 可以让中文在日志里保持可读，不会变成 \\u4f60 这类转义。
+    ensure_ascii=False 可以让中文在日志里保持可读，不会变成 \u4f60 这类转义。
     """
     payload = json.dumps(asdict(trace), ensure_ascii=False, default=str)
     logger.info(payload)

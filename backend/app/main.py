@@ -1,4 +1,4 @@
-from fastapi import Depends, FastAPI, HTTPException
+from fastapi import Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import Settings, get_settings
@@ -33,7 +33,7 @@ def create_app() -> FastAPI:
     ) -> ChatResponse:
         """智能客服聊天入口。
 
-        路由层只负责 HTTP 入参和异常包装；真正的业务流程交给 CustomerServiceAgent。
+        路由层只负责 HTTP 入参和最后兜底；正常业务错误在 orchestrator 内部降级处理。
         """
         try:
             agent = CustomerServiceAgent(current_settings)
@@ -48,8 +48,14 @@ def create_app() -> FastAPI:
                 provider=provider,
                 suggestions=suggestions,
             )
-        except Exception as exc:
-            raise HTTPException(status_code=502, detail=f"客服模型调用失败：{exc}") from exc
+        except Exception:
+            # 极端情况下仍然不把 Python 异常暴露给用户，返回可理解的客服兜底话术。
+            return ChatResponse(
+                answer="抱歉，客服服务暂时繁忙。我已记录您的问题，建议稍后再试或联系人工客服。",
+                session_id=payload.session_id or "fallback-session",
+                provider="system-fallback",
+                suggestions=["联系人工客服", "重新描述问题", "稍后再试"],
+            )
 
     return app
 

@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from dataclasses import dataclass
 from typing import Any
 
 from langchain_core.messages import AIMessage, HumanMessage
@@ -7,6 +8,7 @@ from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_openai import ChatOpenAI
 
 from app.config import Settings
+from app.errors import ChatFlowError, safe_error_message
 from app.schemas import ChatHistoryItem
 from app.session.store import ConversationState
 from app.tools.schemas import ToolResult
@@ -20,6 +22,16 @@ SYSTEM_PROMPT = """你是智能客服小智，负责为用户解答权益、积�
 4. 如果业务工具返回 mock 数据，需要说明当前是业务查询结果摘要，不要扩大解释为最终人工审核结论。
 5. 如果用户情绪焦急，先安抚，再给出可执行方案。
 """
+
+
+@dataclass(slots=True)
+class GenerateAnswerResult:
+    """回答生成结果。"""
+
+    answer: str
+    provider: str
+    fallback_used: bool = False
+    error: ChatFlowError | None = None
 
 
 class AnswerGenerator:
@@ -37,47 +49,69 @@ class AnswerGenerator:
         state: ConversationState,
         history: list[ChatHistoryItem],
         tool_result: ToolResult | None = None,
-    ) -> tuple[str, str]:
-        """根据会话状态和业务工具结果生成最终回复。"""
-        provider = "doubao" if self.settings.has_real_api_key else "local-fallback"
+    ) -> GenerateAnswerResult:
+        """根据会话状态和业务工具结果生成最终回复。
+
+        模型调用失败时不会抛出异常，而是返回本地兜底答案。
+        """
         if not self.settings.has_real_api_key:
-            return self._local_answer(state, tool_result), provider
+            return GenerateAnswerResult(
+                answer=self._local_answer(state, tool_result),
+                provider="local-fallback",
+            )
 
-        llm = ChatOpenAI(
-            api_key=self.settings.doubao_api_key,
-            base_url=self.settings.doubao_base_url,
-            model=self.settings.doubao_model,
-            temperature=self.settings.doubao_temperature,
-        )
+        try:
+            llm = ChatOpenAI(
+                api_key=self.settings.doubao_api_key,
+                base_url=self.settings.doubao_base_url,
+                model=self.settings.doubao_model,
+                temperature=self.settings.doubao_temperature,
+            )
 
-        # Prompt 中显式给出“业务工具结果”，约束 LLM 基于事实组织语言。
-        prompt = ChatPromptTemplate.from_messages(
-            [
-                ("system", SYSTEM_PROMPT),
-                MessagesPlaceholder("history"),
-                (
-                    "human",
-                    "用户原始问题：{message}\n"
-                    "当前意图：{intent}\n"
-                    "已确认槽位：{slots}\n"
-                    "业务工具结果：{tool_result}\n"
-                    "请基于以上信息生成客服回复。",
-                ),
-            ]
-        )
-        result = await (prompt | llm).ainvoke(
-            {
-                "message": message,
-                "intent": state.current_intent or "unknown",
-                "slots": {code: slot.value for code, slot in state.slots.items()},
-                "tool_result": self._tool_result_payload(tool_result),
-                "history": self._to_langchain_history(history),
-            }
-        )
-        return self._message_content_to_text(result.content), provider
+            # Prompt 中显式给出“业务工具结果”，约束 LLM 基于事实组织语言。
+            prompt = ChatPromptTemplate.from_messages(
+                [
+                    ("system", SYSTEM_PROMPT),
+                    MessagesPlaceholder("history"),
+                    (
+                        "human",
+                        "用户原始问题：{message}\n"
+                        "当前意图：{intent}\n"
+                        "已确认槽位：{slots}\n"
+                        "业务工具结果：{tool_result}\n"
+                        "请基于以上信息生成客服回复。",
+                    ),
+                ]
+            )
+            result = await (prompt | llm).ainvoke(
+                {
+                    "message": message,
+                    "intent": state.current_intent or "unknown",
+                    "slots": {code: slot.value for code, slot in state.slots.items()},
+                    "tool_result": self._tool_result_payload(tool_result),
+                    "history": self._to_langchain_history(history),
+                }
+            )
+            return GenerateAnswerResult(
+                answer=self._message_content_to_text(result.content),
+                provider="doubao",
+            )
+        except Exception as exc:
+            error = ChatFlowError(
+                stage="llm",
+                error_type=exc.__class__.__name__,
+                message=safe_error_message(exc),
+                fallback_used=True,
+            )
+            return GenerateAnswerResult(
+                answer=self._local_answer(state, tool_result),
+                provider="local-fallback",
+                fallback_used=True,
+                error=error,
+            )
 
     def _local_answer(self, state: ConversationState, tool_result: ToolResult | None) -> str:
-        """本地兜底回答，用于没有真实模型 Key 的开发环境。"""
+        """本地兜底回答，用于没有真实模型 Key 或模型失败时。"""
         if tool_result and tool_result.success:
             return tool_result.message
         if tool_result and not tool_result.success:
@@ -95,7 +129,7 @@ class AnswerGenerator:
                 "积分通常可通过消费、参与活动、完成任务等方式获得。"
                 "目前积分查询工具还未接入，后续会根据手机号后四位或用户ID查询具体积分状态。"
             )
-        return "我已记录您的问题，后续会根据业务规则和系统查询结果继续处理。"
+        return "抱歉，客服服务暂时繁忙。我已记录您的问题，建议稍后再试或联系人工客服。"
 
     def _slot_summary(self, state: ConversationState) -> str:
         """把当前会话槽位转成方便阅读的文本。"""

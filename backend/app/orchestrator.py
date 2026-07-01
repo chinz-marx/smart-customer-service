@@ -6,9 +6,10 @@ from dataclasses import dataclass
 
 from app.config import Settings
 from app.configs.loader import load_runtime_config
+from app.errors import ChatFlowError
 from app.intent.classifier import IntentClassifier
 from app.intent.schemas import IntentResult
-from app.llm.generator import AnswerGenerator
+from app.llm.generator import GenerateAnswerResult, AnswerGenerator
 from app.observability.logger import ChatTrace, log_chat_trace, mask_message, mask_slots
 from app.preprocessing.normalizer import PreprocessResult, TextPreprocessor
 from app.rules.engine import RouteDecision, RuleEngine
@@ -92,6 +93,8 @@ class CustomerServiceOrchestrator:
                 decision=decision,
                 provider=provider,
                 tool_result=None,
+                flow_error=None,
+                fallback_used=False,
             )
             return ChatOrchestrationResult(
                 answer=decision.answer or "",
@@ -104,7 +107,7 @@ class CustomerServiceOrchestrator:
         tool_result = await self._call_business_tool(current_session_id, state)
 
         # 7. 最后把意图、槽位、工具结果交给回答生成器组织成客服话术。
-        answer, provider = await self.answer_generator.generate(message, state, history, tool_result)
+        generate_result = await self.answer_generator.generate(message, state, history, tool_result)
         session_store.save(state)
         self._log_trace(
             started_at=started_at,
@@ -114,13 +117,15 @@ class CustomerServiceOrchestrator:
             intent=intent,
             state=state,
             decision=decision,
-            provider=provider,
+            provider=generate_result.provider,
             tool_result=tool_result,
+            flow_error=self._flow_error(tool_result, generate_result),
+            fallback_used=generate_result.fallback_used or bool(tool_result and not tool_result.success),
         )
         return ChatOrchestrationResult(
-            answer=answer,
+            answer=generate_result.answer,
             session_id=current_session_id,
-            provider=provider,
+            provider=generate_result.provider,
             suggestions=decision.suggestions,
         )
 
@@ -142,6 +147,23 @@ class CustomerServiceOrchestrator:
         )
         return await self.tool_registry.call(tool_name, request)
 
+    def _flow_error(
+        self,
+        tool_result: ToolResult | None,
+        generate_result: GenerateAnswerResult,
+    ) -> ChatFlowError | None:
+        """把工具失败或模型失败统一转换成日志错误对象。"""
+        if generate_result.error:
+            return generate_result.error
+        if tool_result and not tool_result.success:
+            return ChatFlowError(
+                stage=tool_result.failed_stage or "tool",
+                error_type=tool_result.error_type or tool_result.error_code or "ToolFailed",
+                message=tool_result.message,
+                fallback_used=True,
+            )
+        return None
+
     def _log_trace(
         self,
         started_at: float,
@@ -153,6 +175,8 @@ class CustomerServiceOrchestrator:
         decision: RouteDecision,
         provider: str,
         tool_result: ToolResult | None,
+        flow_error: ChatFlowError | None,
+        fallback_used: bool,
     ) -> None:
         """记录一轮对话的结构化链路日志。
 
@@ -172,6 +196,10 @@ class CustomerServiceOrchestrator:
             tool_name=tool_result.tool_name if tool_result else None,
             tool_success=tool_result.success if tool_result else None,
             tool_error_code=tool_result.error_code if tool_result else None,
+            failed_stage=flow_error.stage if flow_error else None,
+            error_type=flow_error.error_type if flow_error else None,
+            error_message=flow_error.message if flow_error else None,
+            fallback_used=fallback_used,
             emotion=preprocess.emotion,
             sensitive=preprocess.sensitive,
         )
