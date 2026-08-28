@@ -37,6 +37,15 @@ class SlotManager:
                 # 配置里有 validation 时，必须校验通过才算有效槽位。
                 if definition.validation:
                     slot.validated = bool(re.fullmatch(definition.validation, slot.value))
+                else:
+                    # 没有正则的语义槽位（如活动名称）已通过当前意图的槽位白名单，
+                    # 可以标记为有效；业务真实性仍应由后续Tool接口校验。
+                    slot.validated = True
+
+                # LLM有时会把“返现、奖励”等业务类别词误当成具体活动名称。
+                # denied_values放在YAML中，运营调整业务词时不需要修改Python代码。
+                if slot.value.strip() in definition.denied_values:
+                    slot.validated = False
                 state.slots[code] = slot
 
         state.touch()

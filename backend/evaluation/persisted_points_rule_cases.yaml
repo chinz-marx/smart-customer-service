@@ -1,0 +1,176 @@
+version: 1
+description: 会员积分规则发布后的独立改写评测集；正样本没有写入Redis。
+target:
+  title: 会员积分有效期与退款返还规则（真实评测）
+  intent: points_rules
+  expected_chunks: 3
+
+threshold_candidates: [0.20, 0.25, 0.30, 0.35, 0.38, 0.40, 0.45, 0.50, 0.55, 0.60]
+
+acceptance_thresholds:
+  min_knowledge_recall_at_3: 0.90
+  min_chunk_recall_at_3: 0.85
+  min_configured_positive_recall: 0.80
+  max_configured_negative_false_positive_rate: 0.20
+  max_error_count: 0
+
+cases:
+  # 分片0：积分有效期。以下问法都没有作为标准问法写入Redis。
+  - id: points-expiry-01
+    text: 我去年买东西攒的积分什么时候清零？
+    expected_match: true
+    expected_chunk_no: 0
+  - id: points-expiry-02
+    text: 积分放超过一年还能继续用吗？
+    expected_match: true
+    expected_chunk_no: 0
+  - id: points-expiry-03
+    text: 系统误删了没到期的积分能补回来吗？
+    expected_match: true
+    expected_chunk_no: 0
+  - id: points-expiry-04
+    text: 用积分的时候会优先扣快到期的吗？
+    expected_match: true
+    expected_chunk_no: 0
+  - id: points-expiry-05
+    text: 活动送的积分也固定十二个月有效吗？
+    expected_match: true
+    expected_chunk_no: 0
+
+  # 分片1：退款返还。
+  - id: points-refund-01
+    text: 退货以后当时抵扣的积分多久能回来？
+    expected_match: true
+    expected_chunk_no: 1
+  - id: points-refund-02
+    text: 一笔订单只退其中一件，积分按什么比例退？
+    expected_match: true
+    expected_chunk_no: 1
+  - id: points-refund-03
+    text: 退款成功时原来的积分早就失效了，还会返吗？
+    expected_match: true
+    expected_chunk_no: 1
+  - id: points-refund-04
+    text: 满减、券和积分一起付款，售后积分怎么计算？
+    expected_match: true
+    expected_chunk_no: 1
+  - id: points-refund-05
+    text: 整个订单都退了，抵掉的积分是不是原路回账户？
+    expected_match: true
+    expected_chunk_no: 1
+
+  # 分片2：赠送积分扣回与异常处理。
+  - id: points-deduct-01
+    text: 商品退掉之后，下单送我的积分会收回去吗？
+    expected_match: true
+    expected_chunk_no: 2
+  - id: points-deduct-02
+    text: 赠送积分已经花掉了，现在账户没积分可扣怎么办？
+    expected_match: true
+    expected_chunk_no: 2
+  - id: points-deduct-03
+    text: 因为平台发错货退款，也要扣掉奖励积分吗？
+    expected_match: true
+    expected_chunk_no: 2
+  - id: points-deduct-04
+    text: 退款积分一天多还没到账，应该走什么处理流程？
+    expected_match: true
+    expected_chunk_no: 2
+  - id: points-deduct-05
+    text: 我没找到订单号，客服能不能直接帮我改积分？
+    expected_match: true
+    expected_chunk_no: 2
+
+  # 跨领域负样本，用于观察当前距离门槛是否会误接收明显无关问题。
+  - id: negative-01
+    text: 今天北京会下雨吗？
+    expected_match: false
+  - id: negative-02
+    text: 帮我写一段年会主持词。
+    expected_match: false
+  - id: negative-03
+    text: Java虚拟机的垃圾回收算法有哪些？
+    expected_match: false
+  - id: negative-04
+    text: 从上海到杭州坐高铁要多久？
+    expected_match: false
+  - id: negative-05
+    text: 推荐一部适合周末看的电影。
+    expected_match: false
+  # 困难负样本：都与积分有关，但答案不在“有效期、退款返还、赠送积分扣回”规则中。
+  # 这些问题即使语义接近，也不应由当前知识分片直接回答。
+  - id: hard-negative-01
+    text: 一百积分可以兑换多少钱的商品？
+    expected_match: false
+  - id: hard-negative-02
+    text: 积分抵现金的换算比例是多少？
+    expected_match: false
+  - id: hard-negative-03
+    text: 每笔订单最多可以用多少积分抵扣？
+    expected_match: false
+  - id: hard-negative-04
+    text: 账户里的积分可以提现吗？
+    expected_match: false
+  - id: hard-negative-05
+    text: 可以用积分直接购买会员资格吗？
+    expected_match: false
+  - id: hard-negative-06
+    text: 积分商城兑换的商品什么时候发货？
+    expected_match: false
+  - id: hard-negative-07
+    text: 积分商城换到的商品支持七天无理由吗？
+    expected_match: false
+  - id: hard-negative-08
+    text: 积分抽奖中奖后在哪里领取奖品？
+    expected_match: false
+  - id: hard-negative-09
+    text: 两个会员账号的积分能合并到一起吗？
+    expected_match: false
+  - id: hard-negative-10
+    text: 更换绑定手机号后积分怎么迁移？
+    expected_match: false
+  - id: hard-negative-11
+    text: 注销会员账号时剩余积分怎么处理？
+    expected_match: false
+  - id: hard-negative-12
+    text: 家庭成员之间可以共享积分额度吗？
+    expected_match: false
+  - id: hard-negative-13
+    text: 企业会员和个人会员的积分规则一样吗？
+    expected_match: false
+  - id: hard-negative-14
+    text: 签到中断了一天可以补签拿积分吗？
+    expected_match: false
+  - id: hard-negative-15
+    text: 邀请好友注册能奖励多少积分？
+    expected_match: false
+  - id: hard-negative-16
+    text: 不同会员等级获得的积分倍数是多少？
+    expected_match: false
+  - id: hard-negative-17
+    text: 黑金会员有没有积分加速权益？
+    expected_match: false
+  - id: hard-negative-18
+    text: 结算时积分可以用来抵运费吗？
+    expected_match: false
+  - id: hard-negative-19
+    text: 积分兑换的优惠券可以在哪些商品使用？
+    expected_match: false
+  - id: hard-negative-20
+    text: 用积分支付的部分可以申请开发票吗？
+    expected_match: false
+  - id: hard-negative-21
+    text: 海外订单消费可以累计会员积分吗？
+    expected_match: false
+  - id: hard-negative-22
+    text: 线下门店购物的积分怎么同步到线上？
+    expected_match: false
+  - id: hard-negative-23
+    text: 我的积分被冻结了，需要多久才能解冻？
+    expected_match: false
+  - id: hard-negative-24
+    text: 发现积分被别人盗用应该怎么申诉？
+    expected_match: false
+  - id: hard-negative-25
+    text: 做完积分任务后一直显示审核中怎么办？
+    expected_match: false

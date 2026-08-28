@@ -33,9 +33,9 @@ def test_reward_flow_calls_mock_tool_when_user_provides_slot(local_settings: Set
     answer, same_session_id, provider, _ = asyncio.run(agent.reply("订单号是 123456789", session_id, []))
 
     assert same_session_id == session_id
-    assert provider == "local-fallback"
+    assert provider == "tool:reward_query"
     assert "订单号 123456789" in answer
-    assert "奖励正在处理中" in answer
+    assert "当前状态：奖励正在处理中" in answer
     assert "3个工作日" in answer
 
     # 统一埋点应该记录本轮走了 reward_query 工具，同时订单号已被脱敏。
@@ -44,6 +44,28 @@ def test_reward_flow_calls_mock_tool_when_user_provides_slot(local_settings: Set
     assert payload["slots"]["order_id"] == "1234****6789"
 
 
+def test_complete_tool_answer_skips_answer_model(
+    local_settings: Settings,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Tool声明完整话术后，编排器不能再调用第二次回答模型。"""
+    agent = CustomerServiceAgent(local_settings)
+    called = False
+
+    async def fail_if_called(*args, **kwargs):
+        nonlocal called
+        called = True
+        raise AssertionError("完整Tool话术不应调用回答模型")
+
+    monkeypatch.setattr(agent.orchestrator.answer_generator, "generate", fail_if_called)
+
+    _, session_id, _, _ = asyncio.run(agent.reply("我的奖励还没到账", None, []))
+    answer, _, provider, _ = asyncio.run(agent.reply("订单号是 123456789", session_id, []))
+
+    assert called is False
+    assert provider == "tool:reward_query"
+    assert "当前状态：奖励正在处理中" in answer
+
 def test_points_flow_calls_mock_tool(local_settings: Settings) -> None:
     agent = CustomerServiceAgent(local_settings)
 
@@ -51,8 +73,8 @@ def test_points_flow_calls_mock_tool(local_settings: Settings) -> None:
     answer, same_session_id, provider, _ = asyncio.run(agent.reply("手机号后四位是 1234", session_id, []))
 
     assert same_session_id == session_id
-    assert provider == "local-fallback"
-    assert "当前积分为1280分" in answer
+    assert provider == "tool:points_query"
+    assert "当前积分余额：1280分" in answer
     assert "2026-12-31" in answer
 
 

@@ -26,6 +26,8 @@ class ToolResult:
     success: bool
     data: dict[str, object] = field(default_factory=dict)
     message: str = ""
+    # True表示message已经是可直接展示给用户的完整话术，编排器无需再调用回答模型。
+    direct_answer: bool = False
     error_code: str | None = None
     failed_stage: str | None = None
     error_type: str | None = None

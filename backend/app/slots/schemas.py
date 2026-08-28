@@ -12,6 +12,8 @@ class SlotDefinition:
     ask_prompt: str
     required: bool = False
     validation: str | None = None
+    # 这些词只描述业务类别，不能作为真正的槽位值触发Tool调用。
+    denied_values: tuple[str, ...] = ()
 
 
 @dataclass(slots=True)

@@ -11,7 +11,7 @@ from app.slots.manager import SlotManager
 
 @dataclass(slots=True)
 class RouteDecision:
-    """规则引擎的决策结果。"""
+    """策略路由器的决策结果。"""
 
     action: str
     answer: str | None = None
@@ -20,30 +20,49 @@ class RouteDecision:
 
 
 class RuleEngine:
-    """规则决策层。
+    """安全和业务策略路由层。
 
-    这里决定当前轮应该追问、澄清、转人工，还是继续调用业务工具和生成答案。
+    意图和语义槽位现在由UnderstandingService负责；这里不重复理解用户文本，
+    只根据风险、置信度和槽位完整性决定下一步，保证业务执行可控。
     """
 
-    def __init__(self, slot_manager: SlotManager) -> None:
+    def __init__(self, slot_manager: SlotManager, confidence_threshold: float = 0.65) -> None:
         self.slot_manager = slot_manager
+        self.confidence_threshold = confidence_threshold
 
     def decide(
         self,
         preprocess: PreprocessResult,
         intent: IntentResult,
         state: ConversationState,
+        risk_level: str = "low",
+        needs_clarification: bool = False,
     ) -> RouteDecision:
-        """根据预处理、意图和槽位状态做路由决策。"""
-        if preprocess.sensitive:
+        """根据安全风险、意图置信度和槽位状态做确定性路由。"""
+        # 本地敏感词和LLM高风险判断任意一个命中，都不继续调用业务工具。
+        if preprocess.sensitive or risk_level == "high":
             return RouteDecision(
                 action="handoff",
                 answer="这个问题可能涉及敏感信息。为了保护您的账户安全，建议转人工客服处理。",
                 suggestions=["联系人工客服", "重新描述问题", "查看帮助中心"],
-                reason="sensitive_risk",
+                reason="sensitive_risk" if preprocess.sensitive else "llm_high_risk",
             )
 
-        if intent.intent == "unknown" or intent.confidence < 0.60:
+        # 明确的人工诉求属于执行策略，优先于普通澄清，避免让用户重复要求转人工。
+        if intent.intent == "human_handoff":
+            return RouteDecision(
+                action="handoff",
+                answer="好的，我已为您记录转人工诉求。稍后会把当前问题和上下文一并交给人工客服继续处理。",
+                suggestions=self._suggestions_for_intent(intent.intent),
+                reason="human_handoff_intent",
+            )
+
+        # 模型明确表示需要澄清时，即使给出了猜测意图，也不能贸然执行Tool。
+        if (
+            needs_clarification
+            or intent.intent == "unknown"
+            or intent.confidence < self.confidence_threshold
+        ):
             return RouteDecision(
                 action="clarify",
                 answer="我还没完全理解您的问题。您可以补充说明是奖励、积分、权益、订单还是人工客服相关吗？",
@@ -51,20 +70,14 @@ class RuleEngine:
                 reason="low_intent_confidence",
             )
 
-        if intent.is_medium_confidence:
+
+        # 中等置信度先让用户确认，避免误调用查询、退款等业务接口。
+        if intent.confidence < 0.85:
             return RouteDecision(
                 action="confirm_intent",
                 answer="我理解您可能是在咨询奖励、积分或人工客服相关问题。您可以再补充一句具体想处理的事项吗？",
                 suggestions=self._suggestions_for_intent(intent.intent),
                 reason="medium_intent_confidence",
-            )
-
-        if intent.intent == "human_handoff":
-            return RouteDecision(
-                action="handoff",
-                answer="好的，我已为您记录转人工诉求。稍后会把当前问题和上下文一并交给人工客服继续处理。",
-                suggestions=self._suggestions_for_intent(intent.intent),
-                reason="human_handoff_intent",
             )
 
         if not self.slot_manager.is_ready(state):
@@ -82,7 +95,7 @@ class RuleEngine:
         )
 
     def _suggestions_for_intent(self, intent: str) -> list[str]:
-        """从配置里读取当前意图的推荐问题。"""
+        """从意图配置读取推荐问题，避免把业务话术散落在代码里。"""
         intent_config = load_runtime_config().intents.get(intent)
         if intent_config and intent_config.suggestions:
             return list(intent_config.suggestions)

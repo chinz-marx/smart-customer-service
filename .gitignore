@@ -40,6 +40,17 @@ __pycache__/
 *.py[cod]
 *.log
 
+# Generated evaluation reports
+backend/evaluation/reports/**
+!backend/evaluation/reports/offline-runs/
+!backend/evaluation/reports/offline-runs/.gitkeep
+
+# Local frontend design and browser-review artifacts
+frontend/design/
+
+# Obsolete local source archive
+enterprise_intent_router.zip
+
 # Codex/local agent metadata
 .agents/
 .codex/

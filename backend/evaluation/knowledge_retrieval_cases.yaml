@@ -1,0 +1,178 @@
+name: anniversary-rule-retrieval-20260807
+description: 周年庆长规则的知识级、分片级和距离门槛评测，只调用Embedding与Redis Search。
+version: 1
+
+target:
+  title: 周年庆全渠道优惠与售后处理规则
+  intent: activity_rules
+  expected_chunks: 12
+
+# 0.38是当前线上值，其余候选用于观察召回率与误命中率的变化。
+threshold_candidates:
+  - 0.30
+  - 0.34
+  - 0.38
+  - 0.40
+  - 0.42
+  - 0.44
+  - 0.46
+  - 0.48
+  - 0.50
+  - 0.52
+  - 0.54
+  - 0.56
+
+acceptance_thresholds:
+  min_knowledge_recall_at_3: 0.90
+  min_chunk_recall_at_3: 0.75
+  min_configured_positive_recall: 0.80
+  max_configured_negative_false_positive_rate: 0.10
+  max_error_count: 0
+
+cases:
+  # 正样本：每个章节两条真实口语问法，并标注期望分片编号。
+  - id: scope_01
+    text: 周年庆预热的时候我把商品加进购物车，是不是就算锁住库存了
+    expected_match: true
+    expected_chunk_no: 0
+  - id: scope_02
+    text: 我是在第三方平台买的周年庆商品，也适用你们这套活动规则吗
+    expected_match: true
+    expected_chunk_no: 0
+
+  - id: eligibility_01
+    text: 以前买过东西，现在换个手机号还能重新算活动新用户吗
+    expected_match: true
+    expected_chunk_no: 1
+  - id: eligibility_02
+    text: 我付款以后才升级成会员，这一单能补会员折扣吗
+    expected_match: true
+    expected_chunk_no: 1
+
+  - id: coupon_01
+    text: 付款时忘了勾优惠券，订单付完还能找客服补上吗
+    expected_match: true
+    expected_chunk_no: 2
+  - id: coupon_02
+    text: 周年庆的券过期没用掉，可以延期几天吗
+    expected_match: true
+    expected_chunk_no: 2
+
+  - id: discount_01
+    text: 凑单商品退了以后不够满减，退款时会把之前优惠扣回来吗
+    expected_match: true
+    expected_chunk_no: 3
+  - id: discount_02
+    text: 银行立减的钱退款时会不会退，多久能回来
+    expected_match: true
+    expected_chunk_no: 3
+
+  - id: points_01
+    text: 订单取消了，付款时冻结的积分什么时候解冻
+    expected_match: true
+    expected_chunk_no: 4
+  - id: points_02
+    text: 生日礼已经用掉又退了订单，还会重新发一次吗
+    expected_match: true
+    expected_chunk_no: 4
+
+  - id: presale_01
+    text: 预售商品忘记在规定时间付尾款，定金还能退吗
+    expected_match: true
+    expected_chunk_no: 5
+  - id: presale_02
+    text: 为什么我一个订单被拆成好几个快递包裹
+    expected_match: true
+    expected_chunk_no: 5
+
+  - id: cancel_01
+    text: 订单已经进仓库拣货了，我现在还可以直接取消吗
+    expected_match: true
+    expected_chunk_no: 6
+  - id: cancel_02
+    text: 平台显示退款成功了，但银行卡一直没有到账怎么办
+    expected_match: true
+    expected_chunk_no: 6
+
+  - id: return_01
+    text: 七天无理由退货对商品和包装完整度有什么要求
+    expected_match: true
+    expected_chunk_no: 7
+  - id: return_02
+    text: 主商品全部退货的话，订单送的赠品也必须一起退吗
+    expected_match: true
+    expected_chunk_no: 7
+
+  - id: price_01
+    text: 直播间的限时价格比我买的时候便宜，可以申请价保吗
+    expected_match: true
+    expected_chunk_no: 8
+  - id: price_02
+    text: 价格保护审核通过以后，差价会退到什么地方
+    expected_match: true
+    expected_chunk_no: 8
+
+  - id: invoice_01
+    text: 用积分抵扣掉的那部分金额能不能开发票
+    expected_match: true
+    expected_chunk_no: 9
+  - id: invoice_02
+    text: 订单退款以后已经开出来的发票要怎么处理
+    expected_match: true
+    expected_chunk_no: 9
+
+  - id: risk_01
+    text: 我短时间用多个账号抢购周年庆商品，订单会被取消吗
+    expected_match: true
+    expected_chunk_no: 10
+  - id: risk_02
+    text: 订单正在风控人工复核，这段时间还会正常发货吗
+    expected_match: true
+    expected_chunk_no: 10
+
+  - id: service_01
+    text: 客服查询不到物流时，能不能直接根据知识库猜一个进度
+    expected_match: true
+    expected_chunk_no: 11
+  - id: service_02
+    text: 同一个问题连续两轮都没解决，是不是应该转人工客服
+    expected_match: true
+    expected_chunk_no: 11
+
+  # 负样本：同属活动咨询语境，但本规则没有答案，线上应该拒绝直接命中。
+  - id: negative_01
+    text: 周年庆活动页面打开以后一直白屏怎么修复
+    expected_match: false
+  - id: negative_02
+    text: 周年庆抽奖的中奖名单在哪里查看
+    expected_match: false
+  - id: negative_03
+    text: 活动会场的背景音乐叫什么名字
+    expected_match: false
+  - id: negative_04
+    text: 我怎么关闭周年庆活动的消息推送提醒
+    expected_match: false
+  - id: negative_05
+    text: 周年庆海报的高清图片可以从哪里下载
+    expected_match: false
+  - id: negative_06
+    text: 分享活动链接给朋友为什么提示页面不存在
+    expected_match: false
+  - id: negative_07
+    text: 活动页面上的倒计时显示不准确怎么反馈
+    expected_match: false
+  - id: negative_08
+    text: 周年庆直播结束以后在哪里看完整回放
+    expected_match: false
+  - id: negative_09
+    text: 能不能把活动页面主题颜色换成黑色
+    expected_match: false
+  - id: negative_10
+    text: 周年庆期间有哪些商品最值得购买，给我推荐几个
+    expected_match: false
+  - id: negative_11
+    text: 活动主会场的客服头像是谁设计的
+    expected_match: false
+  - id: negative_12
+    text: 我想报名成为周年庆直播间的主持人
+    expected_match: false

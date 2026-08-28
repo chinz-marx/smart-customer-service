@@ -1,0 +1,919 @@
+version: 2
+description: 按真实客服口语风格整理的意图检测集；每类25条，不含真实用户隐私，标识符均为合成数据。
+cases:
+  # 奖励未到账 reward_not_received
+  - id: reward-001
+    text: 我的活动奖励一直没到账
+    expected_intent: reward_not_received
+    expected_slots: {}
+  - id: reward-002
+    text: 参加拉新以后返现怎么还没发
+    expected_intent: reward_not_received
+    expected_slots: {}
+  - id: reward-003
+    text: 奖励迟迟没有入账，帮我看一下
+    expected_intent: reward_not_received
+    expected_slots: {}
+  - id: reward-004
+    text: 昨天那笔返利到现在还没收到
+    expected_intent: reward_not_received
+    expected_slots: {}
+  - id: reward-005
+    text: 我已经满足条件了，活动奖励为什么没有
+    expected_intent: reward_not_received
+    expected_slots: {}
+  - id: reward-006
+    text: 订单号ABC123456的返现还没有到账
+    expected_intent: reward_not_received
+    expected_slots: {order_id: ABC123456}
+  - id: reward-007
+    text: 帮我查查订单RWD2026001对应的奖励进度
+    expected_intent: reward_not_received
+    expected_slots: {order_id: RWD2026001}
+  - id: reward-008
+    text: 单号88990011的活动奖金怎么还没给
+    expected_intent: reward_not_received
+    expected_slots: {order_id: "88990011"}
+  - id: reward-009
+    text: 订单A-20260803说有返现，现在没看到
+    expected_intent: reward_not_received
+    expected_slots: {order_id: A-20260803}
+  - id: reward-010
+    text: 订单号CASHBACK_7788的奖励是不是漏发了
+    expected_intent: reward_not_received
+    expected_slots: {order_id: CASHBACK_7788}
+  - id: reward-011
+    text: 手机尾号1234参加的活动奖励没到账
+    expected_intent: reward_not_received
+    expected_slots: {phone_tail: "1234"}
+  - id: reward-012
+    text: 手机号后四位5678，帮我查一下返现
+    expected_intent: reward_not_received
+    expected_slots: {phone_tail: "5678"}
+  - id: reward-013
+    text: 尾号0099的账户一直没收到奖励
+    expected_intent: reward_not_received
+    expected_slots: {phone_tail: "0099"}
+  - id: reward-014
+    text: 618消费返现活动的奖励还没有发
+    expected_intent: reward_not_received
+    expected_slots: {activity_name: 618消费返现活动}
+  - id: reward-015
+    text: 活动名称是夏日拉新，奖金一直没到账
+    expected_intent: reward_not_received
+    expected_slots: {activity_name: 夏日拉新}
+  - id: reward-016
+    text: 双十一邀请好友活动的返利什么时候到
+    expected_intent: reward_not_received
+    expected_slots: {activity_name: 双十一邀请好友活动}
+  - id: reward-017
+    text: 新人首单返现活动已经完成了但钱没来
+    expected_intent: reward_not_received
+    expected_slots: {activity_name: 新人首单返现活动}
+  - id: reward-018
+    text: 拉新奖励显示审核通过，怎么还没有到账
+    expected_intent: reward_not_received
+    expected_slots: {activity_name: 拉新奖励}
+  - id: reward-019
+    text: 我推荐朋友注册成功了，推荐奖励在哪
+    expected_intent: reward_not_received
+    expected_slots: {}
+  - id: reward-020
+    text: 消费已经达标，答应的返现金额没有入账
+    expected_intent: reward_not_received
+    expected_slots: {}
+  - id: reward-021
+    text: 返现页面显示已发放，可是余额里没有
+    expected_intent: reward_not_received
+    expected_slots: {}
+  - id: reward-022
+    text: 权益中心显示任务完成，奖励却没收到
+    expected_intent: reward_not_received
+    expected_slots: {}
+  - id: reward-023
+    text: 都一周了，活动奖金为什么还在处理中
+    expected_intent: reward_not_received
+    expected_slots: {}
+  - id: reward-024
+    text: 活动页面说三天到账，现在第五天还没有
+    expected_intent: reward_not_received
+    expected_slots: {}
+  - id: reward-025
+    text: 这笔奖励是不是发放失败了
+    expected_intent: reward_not_received
+    expected_slots: {}
+
+  # 积分查询 points_query
+  - id: points-001
+    text: 我想查询积分
+    expected_intent: points_query
+    expected_slots: {}
+  - id: points-002
+    text: 帮我看看现在还有多少积分
+    expected_intent: points_query
+    expected_slots: {}
+  - id: points-003
+    text: 我的积分余额是多少
+    expected_intent: points_query
+    expected_slots: {}
+  - id: points-004
+    text: 在哪里能看到积分明细
+    expected_intent: points_query
+    expected_slots: {}
+  - id: points-005
+    text: 我的积分什么时候会过期
+    expected_intent: points_query
+    expected_slots: {}
+  - id: points-006
+    text: 积分要怎么兑换东西
+    expected_intent: points_query
+    expected_slots: {}
+  - id: points-007
+    text: 最近获得了多少积分，能查记录吗
+    expected_intent: points_query
+    expected_slots: {}
+  - id: points-008
+    text: 为什么我的积分突然少了
+    expected_intent: points_query
+    expected_slots: {}
+  - id: points-009
+    text: 手机号后四位1234，查下积分余额
+    expected_intent: points_query
+    expected_slots: {phone_tail: "1234"}
+  - id: points-010
+    text: 手机尾号5678还有多少分
+    expected_intent: points_query
+    expected_slots: {phone_tail: "5678"}
+  - id: points-011
+    text: 尾号0099的积分明细发我看看
+    expected_intent: points_query
+    expected_slots: {phone_tail: "0099"}
+  - id: points-012
+    text: 帮我查积分，手机号后四位是2468
+    expected_intent: points_query
+    expected_slots: {phone_tail: "2468"}
+  - id: points-013
+    text: 用户ID是user_10086，查询积分
+    expected_intent: points_query
+    expected_slots: {user_id: user_10086}
+  - id: points-014
+    text: 查一下会员U20260001的积分余额
+    expected_intent: points_query
+    expected_slots: {user_id: U20260001}
+  - id: points-015
+    text: 用户编号customer-7788的积分还剩多少
+    expected_intent: points_query
+    expected_slots: {user_id: customer-7788}
+  - id: points-016
+    text: 上个月签到的积分到账了吗
+    expected_intent: points_query
+    expected_slots: {}
+  - id: points-017
+    text: 消费后应该增加多少积分
+    expected_intent: points_query
+    expected_slots: {}
+  - id: points-018
+    text: 这笔积分变动是什么原因
+    expected_intent: points_query
+    expected_slots: {}
+  - id: points-019
+    text: 我可用的分值还有多少
+    expected_intent: points_query
+    expected_slots: {}
+  - id: points-020
+    text: 看一下待过期积分
+    expected_intent: points_query
+    expected_slots: {}
+  - id: points-021
+    text: 积分兑换记录能不能查
+    expected_intent: points_query
+    expected_slots: {}
+  - id: points-022
+    text: 参加活动送的积分有记录吗
+    expected_intent: points_query
+    expected_slots: {}
+  - id: points-023
+    text: 我的会员分数怎么没有变化
+    expected_intent: points_query
+    expected_slots: {}
+  - id: points-024
+    text: 积分有效期是到哪一天
+    expected_intent: points_query
+    expected_slots: {}
+  - id: points-025
+    text: 请把积分余额和即将过期的部分一起查出来
+    expected_intent: points_query
+    expected_slots: {}
+
+  # 转人工 human_handoff，当前投诉和差评也归入人工处理
+  - id: handoff-001
+    text: 给我转人工客服
+    expected_intent: human_handoff
+    expected_slots: {}
+  - id: handoff-002
+    text: 我想找真人处理
+    expected_intent: human_handoff
+    expected_slots: {}
+  - id: handoff-003
+    text: 不要机器人，接人工
+    expected_intent: human_handoff
+    expected_slots: {}
+  - id: handoff-004
+    text: 麻烦让客服人员联系我
+    expected_intent: human_handoff
+    expected_slots: {}
+  - id: handoff-005
+    text: 这个问题机器人解决不了，换个人来
+    expected_intent: human_handoff
+    expected_slots: {}
+  - id: handoff-006
+    text: 转接一下在线客服
+    expected_intent: human_handoff
+    expected_slots: {}
+  - id: handoff-007
+    text: 我需要人工协助
+    expected_intent: human_handoff
+    expected_slots: {}
+  - id: handoff-008
+    text: 能不能安排真人客服
+    expected_intent: human_handoff
+    expected_slots: {}
+  - id: handoff-009
+    text: 请结束自动回复，转人工
+    expected_intent: human_handoff
+    expected_slots: {}
+  - id: handoff-010
+    text: 帮我接人工坐席
+    expected_intent: human_handoff
+    expected_slots: {}
+  - id: handoff-011
+    text: 我要人工客服处理这个问题
+    expected_intent: human_handoff
+    expected_slots: {}
+  - id: handoff-012
+    text: 这个处理我不明白，请接人工
+    expected_intent: human_handoff
+    expected_slots: {}
+  - id: handoff-013
+    text: 我想和工作人员直接沟通
+    expected_intent: human_handoff
+    expected_slots: {}
+  - id: handoff-014
+    text: 找一位客服专员帮我处理
+    expected_intent: human_handoff
+    expected_slots: {}
+  - id: handoff-015
+    text: 这个问题请人工继续跟进
+    expected_intent: human_handoff
+    expected_slots: {}
+  - id: handoff-016
+    text: 机器回复没用，让工作人员来
+    expected_intent: human_handoff
+    expected_slots: {}
+  - id: handoff-017
+    text: 请人工帮我核实一下
+    expected_intent: human_handoff
+    expected_slots: {}
+  - id: handoff-018
+    text: 我不想继续自助查询了
+    expected_intent: human_handoff
+    expected_slots: {}
+  - id: handoff-019
+    text: 有没有客服电话，我要找人
+    expected_intent: human_handoff
+    expected_slots: {}
+  - id: handoff-020
+    text: 给我安排专员处理
+    expected_intent: human_handoff
+    expected_slots: {}
+  - id: handoff-021
+    text: 这个事情需要人工审核
+    expected_intent: human_handoff
+    expected_slots: {}
+  - id: handoff-022
+    text: 帮我提交给人工团队
+    expected_intent: human_handoff
+    expected_slots: {}
+  - id: handoff-023
+    text: 自动客服答非所问，换真人处理
+    expected_intent: human_handoff
+    expected_slots: {}
+  - id: handoff-024
+    text: 我现在很着急，请人工处理
+    expected_intent: human_handoff
+    expected_slots: {}
+  - id: handoff-025
+    text: 这件事请转交人工处理
+    expected_intent: human_handoff
+    expected_slots: {}
+
+  # 业务范围外 unknown
+  - id: unknown-001
+    text: 今天天气怎么样
+    expected_intent: unknown
+    expected_slots: {}
+  - id: unknown-002
+    text: 晚上吃什么比较好
+    expected_intent: unknown
+    expected_slots: {}
+  - id: unknown-003
+    text: 帮我翻译一句英文
+    expected_intent: unknown
+    expected_slots: {}
+  - id: unknown-004
+    text: 写一段Python冒泡排序
+    expected_intent: unknown
+    expected_slots: {}
+  - id: unknown-005
+    text: 北京有哪些旅游景点
+    expected_intent: unknown
+    expected_slots: {}
+  - id: unknown-006
+    text: 一百二十三乘以四十五是多少
+    expected_intent: unknown
+    expected_slots: {}
+  - id: unknown-007
+    text: 给我讲个笑话
+    expected_intent: unknown
+    expected_slots: {}
+  - id: unknown-008
+    text: 推荐几首适合跑步的歌
+    expected_intent: unknown
+    expected_slots: {}
+  - id: unknown-009
+    text: 红烧肉应该怎么做
+    expected_intent: unknown
+    expected_slots: {}
+  - id: unknown-010
+    text: 明天股票会不会涨
+    expected_intent: unknown
+    expected_slots: {}
+  - id: unknown-011
+    text: 感冒发烧应该吃什么药
+    expected_intent: unknown
+    expected_slots: {}
+  - id: unknown-012
+    text: 昨天的足球比赛谁赢了
+    expected_intent: unknown
+    expected_slots: {}
+  - id: unknown-013
+    text: 帮我写一封请假邮件
+    expected_intent: unknown
+    expected_slots: {}
+  - id: unknown-014
+    text: 你会画画吗
+    expected_intent: unknown
+    expected_slots: {}
+  - id: unknown-015
+    text: 给孩子起一个名字
+    expected_intent: unknown
+    expected_slots: {}
+  - id: unknown-016
+    text: 推荐一部周末看的电影
+    expected_intent: unknown
+    expected_slots: {}
+  - id: unknown-017
+    text: 怎么学习日语比较有效
+    expected_intent: unknown
+    expected_slots: {}
+  - id: unknown-018
+    text: 帮我制定一个健身计划
+    expected_intent: unknown
+    expected_slots: {}
+  - id: unknown-019
+    text: 上海到杭州坐高铁多久
+    expected_intent: unknown
+    expected_slots: {}
+  - id: unknown-020
+    text: 给我介绍一下量子计算
+    expected_intent: unknown
+    expected_slots: {}
+  - id: unknown-021
+    text: 电脑蓝屏了怎么修
+    expected_intent: unknown
+    expected_slots: {}
+  - id: unknown-022
+    text: 今天适合穿什么衣服
+    expected_intent: unknown
+    expected_slots: {}
+  - id: unknown-023
+    text: 帮我生成一个随机密码
+    expected_intent: unknown
+    expected_slots: {}
+  - id: unknown-024
+    text: 这个周末有什么展览
+    expected_intent: unknown
+    expected_slots: {}
+  - id: unknown-025
+    text: 请解释一下相对论
+    expected_intent: unknown
+    expected_slots: {}
+  # 订单查询 order_query
+  - id: order-001
+    text: 帮我查一下订单状态
+    expected_intent: order_query
+    expected_slots: {}
+  - id: order-002
+    text: 我的订单现在到哪里了
+    expected_intent: order_query
+    expected_slots: {}
+  - id: order-003
+    text: 昨天下单的商品发货了吗
+    expected_intent: order_query
+    expected_slots: {}
+  - id: order-004
+    text: 看一下这笔订单的物流进度
+    expected_intent: order_query
+    expected_slots: {}
+  - id: order-005
+    text: 快递单号在哪里看
+    expected_intent: order_query
+    expected_slots: {}
+  - id: order-006
+    text: 为什么我的商品还没有发货
+    expected_intent: order_query
+    expected_slots: {}
+  - id: order-007
+    text: 订单显示运输中，预计什么时候到
+    expected_intent: order_query
+    expected_slots: {}
+  - id: order-008
+    text: 我买的东西送到哪了
+    expected_intent: order_query
+    expected_slots: {}
+  - id: order-009
+    text: 帮我确认一下订单有没有提交成功
+    expected_intent: order_query
+    expected_slots: {}
+  - id: order-010
+    text: 这笔订单为什么被关闭了
+    expected_intent: order_query
+    expected_slots: {}
+  - id: order-011
+    text: 我的订单列表里找不到刚买的商品
+    expected_intent: order_query
+    expected_slots: {}
+  - id: order-012
+    text: 查询订单ORD20260803001
+    expected_intent: order_query
+    expected_slots: {}
+  - id: order-013
+    text: 单号SHOP_778899现在是什么状态
+    expected_intent: order_query
+    expected_slots: {}
+  - id: order-014
+    text: 快递已经签收但我没有收到货
+    expected_intent: order_query
+    expected_slots: {}
+  - id: order-015
+    text: 商品还在备货吗
+    expected_intent: order_query
+    expected_slots: {}
+  - id: order-016
+    text: 订单预计送达时间是几点
+    expected_intent: order_query
+    expected_slots: {}
+  - id: order-017
+    text: 能修改这笔订单的收货地址吗
+    expected_intent: order_query
+    expected_slots: {}
+  - id: order-018
+    text: 我想看看订单详情
+    expected_intent: order_query
+    expected_slots: {}
+  - id: order-019
+    text: 为什么同一个订单分成两个包裹
+    expected_intent: order_query
+    expected_slots: {}
+  - id: order-020
+    text: 物流信息两天没有更新了
+    expected_intent: order_query
+    expected_slots: {}
+  - id: order-021
+    text: 订单一直显示待发货
+    expected_intent: order_query
+    expected_slots: {}
+  - id: order-022
+    text: 帮我催一下这个订单
+    expected_intent: order_query
+    expected_slots: {}
+  - id: order-023
+    text: 包裹配送失败是什么原因
+    expected_intent: order_query
+    expected_slots: {}
+  - id: order-024
+    text: 我什么时候能收到买的东西
+    expected_intent: order_query
+    expected_slots: {}
+  - id: order-025
+    text: 查一下最近一笔购买记录
+    expected_intent: order_query
+    expected_slots: {}
+
+  # 权益查询 benefits_query
+  - id: benefits-001
+    text: 我的会员有哪些权益
+    expected_intent: benefits_query
+    expected_slots: {}
+  - id: benefits-002
+    text: 帮我查一下可以使用的优惠券
+    expected_intent: benefits_query
+    expected_slots: {}
+  - id: benefits-003
+    text: 会员礼包在哪里领取
+    expected_intent: benefits_query
+    expected_slots: {}
+  - id: benefits-004
+    text: 我现在是什么会员等级
+    expected_intent: benefits_query
+    expected_slots: {}
+  - id: benefits-005
+    text: 高级会员能享受什么特权
+    expected_intent: benefits_query
+    expected_slots: {}
+  - id: benefits-006
+    text: 为什么我的优惠券不能使用
+    expected_intent: benefits_query
+    expected_slots: {}
+  - id: benefits-007
+    text: 本月会员福利都有什么
+    expected_intent: benefits_query
+    expected_slots: {}
+  - id: benefits-008
+    text: 我的权益什么时候到期
+    expected_intent: benefits_query
+    expected_slots: {}
+  - id: benefits-009
+    text: 新人优惠券怎么领
+    expected_intent: benefits_query
+    expected_slots: {}
+  - id: benefits-010
+    text: 查询一下我已经领取的权益
+    expected_intent: benefits_query
+    expected_slots: {}
+  - id: benefits-011
+    text: 这个会员礼包包含哪些东西
+    expected_intent: benefits_query
+    expected_slots: {}
+  - id: benefits-012
+    text: 优惠券使用门槛是多少
+    expected_intent: benefits_query
+    expected_slots: {}
+  - id: benefits-013
+    text: 我的免邮特权还有效吗
+    expected_intent: benefits_query
+    expected_slots: {}
+  - id: benefits-014
+    text: 会员生日礼物怎么领取
+    expected_intent: benefits_query
+    expected_slots: {}
+  - id: benefits-015
+    text: 为什么别人有专属券我没有
+    expected_intent: benefits_query
+    expected_slots: {}
+  - id: benefits-016
+    text: 权益中心在哪里打开
+    expected_intent: benefits_query
+    expected_slots: {}
+  - id: benefits-017
+    text: 查一下我的月卡剩余天数
+    expected_intent: benefits_query
+    expected_slots: {}
+  - id: benefits-018
+    text: 会员等级升级后多了什么福利
+    expected_intent: benefits_query
+    expected_slots: {}
+  - id: benefits-019
+    text: 优惠券显示已过期还能恢复吗
+    expected_intent: benefits_query
+    expected_slots: {}
+  - id: benefits-020
+    text: 我有哪些可以兑换的会员礼品
+    expected_intent: benefits_query
+    expected_slots: {}
+  - id: benefits-021
+    text: 专属客服算不算会员权益
+    expected_intent: benefits_query
+    expected_slots: {}
+  - id: benefits-022
+    text: 联名会员权益怎么激活
+    expected_intent: benefits_query
+    expected_slots: {}
+  - id: benefits-023
+    text: 我的折扣特权为什么没生效
+    expected_intent: benefits_query
+    expected_slots: {}
+  - id: benefits-024
+    text: 会员续费礼包发了吗
+    expected_intent: benefits_query
+    expected_slots: {}
+  - id: benefits-025
+    text: 帮我汇总一下当前可用权益
+    expected_intent: benefits_query
+    expected_slots: {}
+
+  # 退款处理 refund_request
+  - id: refund-001
+    text: 这笔订单我要退款
+    expected_intent: refund_request
+    expected_slots: {}
+  - id: refund-002
+    text: 帮我申请退钱
+    expected_intent: refund_request
+    expected_slots: {}
+  - id: refund-003
+    text: 退款进度到哪里了
+    expected_intent: refund_request
+    expected_slots: {}
+  - id: refund-004
+    text: 钱什么时候原路退回
+    expected_intent: refund_request
+    expected_slots: {}
+  - id: refund-005
+    text: 我不想要这个商品了，怎么退
+    expected_intent: refund_request
+    expected_slots: {}
+  - id: refund-006
+    text: 申请退款需要什么条件
+    expected_intent: refund_request
+    expected_slots: {}
+  - id: refund-007
+    text: 退款审核要多长时间
+    expected_intent: refund_request
+    expected_slots: {}
+  - id: refund-008
+    text: 为什么退款申请被拒绝了
+    expected_intent: refund_request
+    expected_slots: {}
+  - id: refund-009
+    text: 我已经退货了，退款还没到
+    expected_intent: refund_request
+    expected_slots: {}
+  - id: refund-010
+    text: 可以取消退款申请吗
+    expected_intent: refund_request
+    expected_slots: {}
+  - id: refund-011
+    text: 退款会退到银行卡还是余额
+    expected_intent: refund_request
+    expected_slots: {}
+  - id: refund-012
+    text: 少退了一部分金额怎么办
+    expected_intent: refund_request
+    expected_slots: {}
+  - id: refund-013
+    text: 查询订单REFUND2026001的退款状态
+    expected_intent: refund_request
+    expected_slots: {}
+  - id: refund-014
+    text: 商品有质量问题，我要退货退款
+    expected_intent: refund_request
+    expected_slots: {}
+  - id: refund-015
+    text: 退款成功了为什么账户没收到
+    expected_intent: refund_request
+    expected_slots: {}
+  - id: refund-016
+    text: 运费能一起退吗
+    expected_intent: refund_request
+    expected_slots: {}
+  - id: refund-017
+    text: 我要申请仅退款
+    expected_intent: refund_request
+    expected_slots: {}
+  - id: refund-018
+    text: 已经发货的订单还能退款吗
+    expected_intent: refund_request
+    expected_slots: {}
+  - id: refund-019
+    text: 退款到账时间是几个工作日
+    expected_intent: refund_request
+    expected_slots: {}
+  - id: refund-020
+    text: 帮我撤销这笔交易
+    expected_intent: refund_request
+    expected_slots: {}
+  - id: refund-021
+    text: 退货地址在哪里查看
+    expected_intent: refund_request
+    expected_slots: {}
+  - id: refund-022
+    text: 商家收到退货后多久返钱
+    expected_intent: refund_request
+    expected_slots: {}
+  - id: refund-023
+    text: 为什么只能退到平台余额
+    expected_intent: refund_request
+    expected_slots: {}
+  - id: refund-024
+    text: 退款金额计算得不对
+    expected_intent: refund_request
+    expected_slots: {}
+  - id: refund-025
+    text: 帮我看一下最近的退款记录
+    expected_intent: refund_request
+    expected_slots: {}
+
+  # 活动规则 activity_rules
+  - id: activity-001
+    text: 这个活动要满足什么条件
+    expected_intent: activity_rules
+    expected_slots: {}
+  - id: activity-002
+    text: 活动什么时候开始和结束
+    expected_intent: activity_rules
+    expected_slots: {}
+  - id: activity-003
+    text: 怎么参加拉新活动
+    expected_intent: activity_rules
+    expected_slots: {}
+  - id: activity-004
+    text: 给我看一下完整活动规则
+    expected_intent: activity_rules
+    expected_slots: {}
+  - id: activity-005
+    text: 这个活动有消费门槛吗
+    expected_intent: activity_rules
+    expected_slots: {}
+  - id: activity-006
+    text: 每个人可以参加几次
+    expected_intent: activity_rules
+    expected_slots: {}
+  - id: activity-007
+    text: 活动名额有限制吗
+    expected_intent: activity_rules
+    expected_slots: {}
+  - id: activity-008
+    text: 哪些用户能参加这次活动
+    expected_intent: activity_rules
+    expected_slots: {}
+  - id: activity-009
+    text: 奖励发放条件是什么
+    expected_intent: activity_rules
+    expected_slots: {}
+  - id: activity-010
+    text: 活动期间哪些商品参与
+    expected_intent: activity_rules
+    expected_slots: {}
+  - id: activity-011
+    text: 新用户专享活动怎么算新用户
+    expected_intent: activity_rules
+    expected_slots: {}
+  - id: activity-012
+    text: 活动入口在哪里
+    expected_intent: activity_rules
+    expected_slots: {}
+  - id: activity-013
+    text: 邀请好友要完成哪些步骤
+    expected_intent: activity_rules
+    expected_slots: {}
+  - id: activity-014
+    text: 618返现活动最高能返多少
+    expected_intent: activity_rules
+    expected_slots: {}
+  - id: activity-015
+    text: 参加活动需要先报名吗
+    expected_intent: activity_rules
+    expected_slots: {}
+  - id: activity-016
+    text: 同一个订单能重复参与活动吗
+    expected_intent: activity_rules
+    expected_slots: {}
+  - id: activity-017
+    text: 活动规则中说的有效消费是什么意思
+    expected_intent: activity_rules
+    expected_slots: {}
+  - id: activity-018
+    text: 使用优惠券后还能参加活动吗
+    expected_intent: activity_rules
+    expected_slots: {}
+  - id: activity-019
+    text: 活动时间是按付款时间计算吗
+    expected_intent: activity_rules
+    expected_slots: {}
+  - id: activity-020
+    text: 退款后还算完成活动任务吗
+    expected_intent: activity_rules
+    expected_slots: {}
+  - id: activity-021
+    text: 这个活动和其他优惠可以叠加吗
+    expected_intent: activity_rules
+    expected_slots: {}
+  - id: activity-022
+    text: 活动奖励有没有数量上限
+    expected_intent: activity_rules
+    expected_slots: {}
+  - id: activity-023
+    text: 错过报名时间还能参加吗
+    expected_intent: activity_rules
+    expected_slots: {}
+  - id: activity-024
+    text: 企业用户能参与这个活动吗
+    expected_intent: activity_rules
+    expected_slots: {}
+  - id: activity-025
+    text: 活动细则在哪里查看
+    expected_intent: activity_rules
+    expected_slots: {}
+
+  # 投诉 complaint
+  - id: complaint-001
+    text: 我要投诉你们的服务
+    expected_intent: complaint
+    expected_slots: {}
+  - id: complaint-002
+    text: 这个处理结果我非常不满意
+    expected_intent: complaint
+    expected_slots: {}
+  - id: complaint-003
+    text: 我要给这次服务差评
+    expected_intent: complaint
+    expected_slots: {}
+  - id: complaint-004
+    text: 你们一直拖着不处理，我要投诉
+    expected_intent: complaint
+    expected_slots: {}
+  - id: complaint-005
+    text: 客服态度太差了
+    expected_intent: complaint
+    expected_slots: {}
+  - id: complaint-006
+    text: 我要投诉这次错误扣款
+    expected_intent: complaint
+    expected_slots: {}
+  - id: complaint-007
+    text: 这个问题必须升级处理
+    expected_intent: complaint
+    expected_slots: {}
+  - id: complaint-008
+    text: 我要找负责人反馈服务问题
+    expected_intent: complaint
+    expected_slots: {}
+  - id: complaint-009
+    text: 你们的解决方案完全不能接受
+    expected_intent: complaint
+    expected_slots: {}
+  - id: complaint-010
+    text: 我要对处理人员进行投诉
+    expected_intent: complaint
+    expected_slots: {}
+  - id: complaint-011
+    text: 这么久都没解决，体验太差
+    expected_intent: complaint
+    expected_slots: {}
+  - id: complaint-012
+    text: 我要提交正式投诉
+    expected_intent: complaint
+    expected_slots: {}
+  - id: complaint-013
+    text: 请记录我对本次服务的不满
+    expected_intent: complaint
+    expected_slots: {}
+  - id: complaint-014
+    text: 这个处理过程严重影响了我
+    expected_intent: complaint
+    expected_slots: {}
+  - id: complaint-015
+    text: 再不解决我就向平台举报
+    expected_intent: complaint
+    expected_slots: {}
+  - id: complaint-016
+    text: 我要追究这次错误处理
+    expected_intent: complaint
+    expected_slots: {}
+  - id: complaint-017
+    text: 给我一个投诉编号
+    expected_intent: complaint
+    expected_slots: {}
+  - id: complaint-018
+    text: 我要查询之前提交的投诉
+    expected_intent: complaint
+    expected_slots: {}
+  - id: complaint-019
+    text: 服务人员没有按承诺处理
+    expected_intent: complaint
+    expected_slots: {}
+  - id: complaint-020
+    text: 我对这个结果有严重意见
+    expected_intent: complaint
+    expected_slots: {}
+  - id: complaint-021
+    text: 我要投诉虚假宣传
+    expected_intent: complaint
+    expected_slots: {}
+  - id: complaint-022
+    text: 这次服务我要打最低分
+    expected_intent: complaint
+    expected_slots: {}
+  - id: complaint-023
+    text: 请把我的不满反馈给管理人员
+    expected_intent: complaint
+    expected_slots: {}
+  - id: complaint-024
+    text: 你们必须给我一个正式答复
+    expected_intent: complaint
+    expected_slots: {}
+  - id: complaint-025
+    text: 我要升级投诉并保留记录
+    expected_intent: complaint
+    expected_slots: {}

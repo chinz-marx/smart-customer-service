@@ -1,0 +1,147 @@
+name: semantic-cache-regression-20260806
+description: Redis Search与LangCache接入后的独立意图回归集，只评测意图识别，不进入编排和Tool。
+version: 1
+cases:
+  - id: reg_reward_01
+    text: 任务都完成了，答应的奖励还没看到
+    expected_intent: reward_not_received
+  - id: reg_reward_02
+    text: 拉新成功以后返现一直没有发
+    expected_intent: reward_not_received
+  - id: reg_reward_03
+    text: 我的活动红包怎么还没到账
+    expected_intent: reward_not_received
+  - id: reg_reward_04
+    text: 奖品显示已发放但账户里没有
+    expected_intent: reward_not_received
+  - id: reg_reward_05
+    text: 达标奖励现在是什么进度
+    expected_intent: reward_not_received
+
+  - id: reg_points_01
+    text: 帮我看下现在还剩多少积分
+    expected_intent: points_query
+  - id: reg_points_02
+    text: 我想查最近的积分明细
+    expected_intent: points_query
+  - id: reg_points_03
+    text: 积分余额从哪里能看到
+    expected_intent: points_query
+  - id: reg_points_04
+    text: 为什么我的积分突然少了
+    expected_intent: points_query
+  - id: reg_points_05
+    text: 当前可用积分有几分
+    expected_intent: points_query
+
+  - id: reg_human_01
+    text: 不用机器人了，帮我接真人
+    expected_intent: human_handoff
+  - id: reg_human_02
+    text: 麻烦转给人工坐席处理
+    expected_intent: human_handoff
+  - id: reg_human_03
+    text: 我需要和客服人员直接沟通
+    expected_intent: human_handoff
+  - id: reg_human_04
+    text: 请安排真人客服联系我
+    expected_intent: human_handoff
+  - id: reg_human_05
+    text: 这个问题让人工来解决
+    expected_intent: human_handoff
+
+  - id: reg_order_01
+    text: 帮我查一下这笔订单到哪了
+    expected_intent: order_query
+  - id: reg_order_02
+    text: 我买的东西现在发货了吗
+    expected_intent: order_query
+  - id: reg_order_03
+    text: 想看看订单的物流进度
+    expected_intent: order_query
+  - id: reg_order_04
+    text: 为什么我的订单状态一直没变化
+    expected_intent: order_query
+  - id: reg_order_05
+    text: 查下我昨天买的商品订单
+    expected_intent: order_query
+
+  - id: reg_benefits_01
+    text: 金卡会员现在包含哪些服务
+    expected_intent: benefits_query
+  - id: reg_benefits_02
+    text: 我的会员能享受什么优惠
+    expected_intent: benefits_query
+  - id: reg_benefits_03
+    text: 升级以后新增了哪些权益
+    expected_intent: benefits_query
+  - id: reg_benefits_04
+    text: 会员专属福利在哪里查看
+    expected_intent: benefits_query
+  - id: reg_benefits_05
+    text: 我的免运费权益还能用几次
+    expected_intent: benefits_query
+
+  - id: reg_refund_01
+    text: 这件商品不想要了怎么把钱退回来
+    expected_intent: refund_request
+  - id: reg_refund_02
+    text: 帮我申请取消并退款
+    expected_intent: refund_request
+  - id: reg_refund_03
+    text: 收到的东西有问题我要退钱
+    expected_intent: refund_request
+  - id: reg_refund_04
+    text: 退款需要提交什么材料
+    expected_intent: refund_request
+  - id: reg_refund_05
+    text: 我想退掉刚才支付的订单
+    expected_intent: refund_request
+
+  - id: reg_activity_01
+    text: 新人活动具体怎么报名参加
+    expected_intent: activity_rules
+  - id: reg_activity_02
+    text: 这个活动对账号等级有要求吗
+    expected_intent: activity_rules
+  - id: reg_activity_03
+    text: 抽奖活动一共持续到哪天
+    expected_intent: activity_rules
+  - id: reg_activity_04
+    text: 一个人可以参加几次这个活动
+    expected_intent: activity_rules
+  - id: reg_activity_05
+    text: 邀请活动的达标标准是什么
+    expected_intent: activity_rules
+
+  - id: reg_complaint_01
+    text: 我要正式投诉这次处理结果
+    expected_intent: complaint
+  - id: reg_complaint_02
+    text: 你们的服务让我非常不满意
+    expected_intent: complaint
+  - id: reg_complaint_03
+    text: 我要给这次客服体验差评
+    expected_intent: complaint
+  - id: reg_complaint_04
+    text: 这个问题拖太久了我要追责
+    expected_intent: complaint
+  - id: reg_complaint_05
+    text: 请升级我的投诉并记录下来
+    expected_intent: complaint
+
+  - id: reg_unknown_01
+    text: 今天北京会不会下雨
+    expected_intent: unknown
+  - id: reg_unknown_02
+    text: 帮我写一首关于夏天的诗
+    expected_intent: unknown
+  - id: reg_unknown_03
+    text: 一百二十三乘以九是多少
+    expected_intent: unknown
+  - id: reg_unknown_04
+    text: 推荐一部周末看的电影
+    expected_intent: unknown
+  - id: reg_unknown_05
+    text: Python的装饰器有什么作用
+    expected_intent: unknown

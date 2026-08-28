@@ -22,7 +22,16 @@ class IntentClassifier:
                 priority_keywords=intent_config.priority_keywords,
             )
 
-        ranked = sorted(scores.items(), key=lambda item: item[1], reverse=True)
+        # 分数不同仍以关键词匹配强度为准；只有分数相同才使用统一的多意图优先级。
+        # 这样“投诉客服态度”不会因为顺带出现“客服”二字就错误转人工。
+        priority_index = {
+            intent: index
+            for index, intent in enumerate(runtime_config.multiple_intent_priority)
+        }
+        ranked = sorted(
+            scores.items(),
+            key=lambda item: (-item[1], priority_index.get(item[0], len(priority_index))),
+        )
         if not ranked:
             return self._unknown_result()
 

@@ -35,6 +35,8 @@ class ChatTrace:
     fallback_used: bool = False
     emotion: str = "normal"
     sensitive: bool = False
+    understanding_source: str = "keyword"
+    understanding_error: str | None = None
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 

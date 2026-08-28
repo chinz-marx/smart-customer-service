@@ -1,6 +1,31 @@
+routing_policy:
+  # 敏感信息由规则引擎优先转人工，不参与普通意图之间的比较。
+  high_risk_action: human_handoff
+  # 用户同一句话确实提出多个独立诉求时，从上到下选择主意图。
+  # 仅仅提到历史问题不算新的诉求，不能机械套用此顺序。
+  multiple_intent_priority:
+    - human_handoff
+    - complaint
+    - refund_request
+    - reward_not_received
+    - order_query
+    - benefits_query
+    - points_rules
+    - points_query
+    - activity_rules
+    - system_identity
+    - system_capability
+    - greeting
+
 intents:
   reward_not_received:
     name: 奖励未到账
+    description: 用户咨询现金奖励、返现或返利超过预计时间仍未到账的问题；积分入账问题属于积分查询。
+    examples:
+      - 我参加活动的奖励怎么还没到账
+      - 这笔订单的返现一直没有发放
+      - 拉新奖励什么时候到账
+    response_strategy: TOOL_LLM
     keywords:
       - 奖励
       - 到账
@@ -23,6 +48,14 @@ intents:
       activity_name:
         name: 活动名称
         ask_prompt: 请提供活动名称，比如618消费返现、拉新奖励等。
+        denied_values:
+          - 活动
+          - 奖励
+          - 活动奖励
+          - 返现
+          - 返利
+          - 这个活动
+          - 该活动
       phone_tail:
         name: 手机号后四位
         ask_prompt: 请提供手机号后四位，方便我帮您定位。
@@ -36,7 +69,14 @@ intents:
     tool: reward_query
 
   points_query:
-    name: 积分查询
+    name: 积分账户查询
+    description: 用户查询自己账户的积分余额、积分明细、积分是否到账或少发，需要读取用户实时账户数据。
+    examples:
+      - 帮我看看现在还有多少积分
+      - 我的积分明细在哪里查
+      - 这笔活动积分到账了吗
+      - 为什么我的积分少了
+    response_strategy: TOOL_LLM
     keywords:
       - 积分
       - 分值
@@ -44,6 +84,7 @@ intents:
     priority_keywords:
       - 查询积分
       - 积分明细
+      - 积分到账
     suggestions:
       - 积分如何获得?
       - 积分怎么使用?
@@ -63,20 +104,55 @@ intents:
         - user_id
     tool: points_query
 
+  points_rules:
+    name: 积分规则
+    description: 用户咨询积分有效期、过期处理、退款返还、赠送积分扣回等不依赖个人账户实时数据的静态规则。
+    examples:
+      - 普通积分多久会过期
+      - 退货以后抵扣的积分怎么返还
+      - 部分退款会退回多少积分
+      - 退款后赠送积分会被扣回吗
+      - 积分退款异常怎么处理
+    response_strategy: DETECT_ONLY
+    keywords:
+      - 积分有效期
+      - 积分过期
+      - 积分返还
+      - 积分扣回
+      - 退款积分
+    priority_keywords:
+      - 多久过期
+      - 退款返还
+      - 部分退款
+      - 赠送积分扣回
+    suggestions:
+      - 普通积分有效期多久?
+      - 退款后积分什么时候返还?
+      - 赠送积分会被扣回吗?
+    slots: {}
+    ready_policy:
+      type: none
+      slots: []
+
   human_handoff:
     name: 转人工
+    description: 用户明确要求真人客服、人工坐席或工作人员继续处理。
+    examples:
+      - 给我转人工客服
+      - 机器人解决不了，我要找真人
+      - 请安排工作人员处理
+    response_strategy: HUMAN
     keywords:
       - 人工
       - 客服
-      - 投诉
-      - 差评
+      - 真人
+      - 坐席
       - 转人
     priority_keywords:
       - 转人工
       - 真人客服
       - 人工客服
-      - 投诉
-      - 差评
+      - 人工坐席
     suggestions:
       - 继续描述问题
       - 查看处理进度
@@ -86,3 +162,230 @@ intents:
       type: none
       slots: []
     tool: human_handoff
+
+  order_query:
+    name: 订单查询
+    description: 用户查询订单状态、订单进度、发货、物流、收货或订单详情。
+    examples:
+      - 帮我查一下订单现在到哪了
+      - 我的商品什么时候发货
+      - 看一下这笔订单的物流进度
+    response_strategy: TOOL_LLM
+    keywords:
+      - 订单
+      - 单号
+      - 发货
+      - 物流
+      - 收货
+      - 快递
+    priority_keywords:
+      - 订单状态
+      - 订单进度
+      - 物流进度
+      - 什么时候发货
+    suggestions:
+      - 查询订单状态
+      - 查看物流进度
+      - 联系人工客服
+    slots:
+      order_id:
+        name: 订单号
+        ask_prompt: 请提供需要查询的订单号。
+        validation: "^[A-Za-z0-9_-]{6,64}$"
+    ready_policy:
+      type: all_of
+      slots:
+        - order_id
+    tool: order_query
+
+  benefits_query:
+    name: 权益查询
+    description: 用户查询会员权益、优惠券、礼包、特权的内容、领取方式或使用状态。
+    examples:
+      - 我的会员有哪些权益
+      - 优惠券在哪里领取
+      - 这个月的会员礼包怎么用
+    response_strategy: DETECT_ONLY
+    keywords:
+      - 权益
+      - 优惠券
+      - 礼包
+      - 特权
+      - 会员福利
+    priority_keywords:
+      - 会员权益
+      - 权益查询
+      - 优惠券领取
+      - 会员礼包
+    suggestions:
+      - 查看会员权益
+      - 查询优惠券
+      - 联系人工客服
+    slots: {}
+    ready_policy:
+      type: none
+      slots: []
+
+  refund_request:
+    name: 退款处理
+    description: 用户申请退款、取消退款、查询退款进度或咨询退款到账时间。
+    examples:
+      - 这笔订单我要退款
+      - 退款什么时候原路退回
+      - 帮我查一下退款进度
+    response_strategy: DETECT_ONLY
+    keywords:
+      - 退款
+      - 退钱
+      - 退货
+      - 原路退回
+      - 退款进度
+    priority_keywords:
+      - 申请退款
+      - 我要退款
+      - 退款进度
+      - 退款到账
+    suggestions:
+      - 申请退款
+      - 查询退款进度
+      - 联系人工客服
+    slots: {}
+    ready_policy:
+      type: none
+      slots: []
+
+  activity_rules:
+    name: 活动规则
+    description: 用户咨询活动时间、参与条件、奖励条件、名额、门槛或参加方式。
+    examples:
+      - 这个活动要满足什么条件
+      - 活动什么时候结束
+      - 怎么参加拉新活动
+    response_strategy: DETECT_ONLY
+    keywords:
+      - 活动规则
+      - 参加条件
+      - 活动时间
+      - 活动门槛
+      - 如何参加
+    priority_keywords:
+      - 活动规则
+      - 参与条件
+      - 活动什么时候结束
+      - 怎么参加活动
+    suggestions:
+      - 查看活动规则
+      - 查询参与条件
+      - 联系人工客服
+    slots: {}
+    ready_policy:
+      type: none
+      slots: []
+
+  complaint:
+    name: 投诉
+    description: 用户明确表达投诉、差评、服务不满、追责或要求升级处理，但不一定要求立即转人工。
+    examples:
+      - 我要投诉你们的服务
+      - 这个处理结果我非常不满意
+      - 我要给这次服务差评
+    response_strategy: DETECT_ONLY
+    keywords:
+      - 投诉
+      - 差评
+      - 不满意
+      - 服务太差
+      - 追责
+    priority_keywords:
+      - 我要投诉
+      - 升级投诉
+      - 给差评
+      - 投诉你们
+    suggestions:
+      - 提交投诉
+      - 补充问题经过
+      - 联系人工客服
+    slots: {}
+    ready_policy:
+      type: none
+      slots: []
+  greeting:
+    name: 寒暄问候
+    description: 用户只是在打招呼、询问是否在线，没有同时提出订单、退款、积分等具体业务诉求。
+    examples:
+      - 你好呀
+      - 有人在吗
+      - 小智晚上好
+    response_strategy: DIRECT
+    keywords:
+      - 你好
+      - 您好
+      - 在吗
+      - 哈喽
+      - hello
+    priority_keywords:
+      - 你好呀
+      - 有人在吗
+      - 晚上好
+    suggestions:
+      - 查询订单
+      - 咨询退款规则
+      - 了解会员权益
+    slots: {}
+    ready_policy:
+      type: none
+      slots: []
+
+  system_identity:
+    name: 系统身份
+    description: 用户询问当前客服是谁、叫什么、是真人还是机器人，并且没有同时提出具体业务诉求。
+    examples:
+      - 简单介绍下你自己呗
+      - 我现在是在和机器人聊天吗
+      - 请问你叫什么名字
+    response_strategy: DIRECT
+    keywords:
+      - 你是谁
+      - 你叫什么
+      - 机器人
+      - 真人吗
+      - 介绍自己
+    priority_keywords:
+      - 介绍一下自己
+      - 你叫什么名字
+      - 你是机器人吗
+    suggestions:
+      - 你能做什么
+      - 查询订单
+      - 联系人工客服
+    slots: {}
+    ready_policy:
+      type: none
+      slots: []
+
+  system_capability:
+    name: 服务能力
+    description: 用户询问智能客服能提供哪些帮助、支持哪些业务，并且没有同时提出具体业务诉求。
+    examples:
+      - 第一次来，不知道你都能帮我干啥
+      - 你这里支持办理哪些业务
+      - 你可以解决什么问题
+    response_strategy: DIRECT
+    keywords:
+      - 能做什么
+      - 能帮我什么
+      - 有什么功能
+      - 支持什么
+      - 解决什么问题
+    priority_keywords:
+      - 你能做什么
+      - 能帮我干啥
+      - 支持哪些业务
+    suggestions:
+      - 查询订单
+      - 了解积分规则
+      - 联系人工客服
+    slots: {}
+    ready_policy:
+      type: none
+      slots: []

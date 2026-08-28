@@ -34,5 +34,11 @@ class RewardQueryTool:
             tool_name=self.name,
             success=True,
             data=data,
-            message=f"已根据{basis}查询到奖励正在处理中，通常会在满足活动条件后的3个工作日内到账。",
+            message=(
+                f"您好，已根据{basis}查询到奖励发放状态：\n"
+                "当前状态：奖励正在处理中\n"
+                "预计到账时间：满足活动条件后的3个工作日内。\n"
+                "如果超过预计时间仍未到账，请联系人工客服进一步核查。"
+            ),
+            direct_answer=True,
         )

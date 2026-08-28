@@ -1,0 +1,108 @@
+server:
+  # Windows PowerShell、Linux shell 或容器都可以用 BUSINESS_SERVER_PORT 覆盖端口。
+  port: ${BUSINESS_SERVER_PORT:8081}
+  shutdown: graceful
+
+spring:
+  application:
+    name: business-service
+  ai:
+    mcp:
+      server:
+        # MCP 名称必须保持稳定，Python 会使用该名称从 Nacos 发现服务。
+        name: ${MCP_SERVER_NAME:smart-customer-business-tools}
+        # 新增正式退款申请Tool和异步支付闭环，发布新的次版本。
+        version: ${MCP_SERVER_VERSION:1.3.0}
+        type: SYNC
+        protocol: STREAMABLE
+        instructions: "智能客服真实业务工具，只允许编排服务调用。"
+    alibaba:
+      mcp:
+        nacos:
+          # Nacos 地址和账号只能通过环境变量注入，不能把生产凭证提交到仓库。
+          server-addr: ${NACOS_SERVER_ADDR:http://123.57.49.25:8848}
+          namespace: ${NACOS_NAMESPACE:public}
+          username: ${NACOS_USERNAME:}
+          password: ${NACOS_PASSWORD:}
+          register:
+            enabled: ${NACOS_MCP_REGISTER_ENABLED:false}
+  datasource:
+    url: ${BUSINESS_DATABASE_URL:jdbc:postgresql://127.0.0.1:5432/smart_customer_service}
+    username: ${BUSINESS_DATABASE_USERNAME:postgres}
+    # 不在代码仓库保存数据库密码；本地运行前通过环境变量传入。
+    password: ${BUSINESS_DATABASE_PASSWORD:}
+    hikari:
+      maximum-pool-size: ${BUSINESS_DB_MAX_POOL_SIZE:10}
+      minimum-idle: ${BUSINESS_DB_MIN_IDLE:2}
+      connection-timeout: 3000
+  data:
+    redis:
+      # Java使用Redis完成分布式锁和确定性FAQ缓存读取；地址通过环境变量注入。
+      url: ${BUSINESS_REDIS_URL:redis://127.0.0.1:6379/0}
+      connect-timeout: 3s
+      timeout: 3s
+  flyway:
+    enabled: true
+    create-schemas: true
+    schemas: business
+    default-schema: business
+    locations: classpath:db/migration
+
+mybatis-plus:
+  configuration:
+    # PostgreSQL 字段是 snake_case，Java 属性是 camelCase，此配置自动完成二者映射。
+    map-underscore-to-camel-case: true
+  global-config:
+    db-config:
+      schema: business
+      id-type: auto
+      # 实体的 deleted 字段使用 true/false 逻辑删除，普通查询会自动排除已删除记录。
+      logic-delete-field: deleted
+      logic-delete-value: true
+      logic-not-delete-value: false
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info
+  endpoint:
+    health:
+      probes:
+        enabled: true
+      show-details: never
+
+tool:
+  security:
+    # 不提供默认令牌，任何环境启动前都必须显式设置 TOOL_INTERNAL_TOKEN。
+    internal-token: ${TOOL_INTERNAL_TOKEN}
+
+knowledge:
+  faq:
+    question-map-prefix: ${KNOWLEDGE_QUESTION_MAP_KEY_PREFIX:cs:knowledge:question-map:}
+  sync:
+    # Java审批成功后通过Outbox调用Python完成切片、Embedding和Redis Search发布。
+    python-base-url: ${KNOWLEDGE_SYNC_PYTHON_BASE_URL:http://127.0.0.1:8000}
+    interval-ms: ${KNOWLEDGE_SYNC_INTERVAL_MS:5000}
+    initial-delay-ms: ${KNOWLEDGE_SYNC_INITIAL_DELAY_MS:3000}
+
+customer:
+  # 正式认证接入前与Python客服链路保持同一个测试用户。
+  demo-user-id: ${DEMO_USER_ID:demo-user-001}
+
+learning:
+  evaluation:
+    # 自动发布验收使用数据库原子认领，多个 Java 实例同时启动也只会有一个实例执行同一批次。
+    interval-ms: ${LEARNING_EVALUATION_INTERVAL_MS:5000}
+    initial-delay-ms: ${LEARNING_EVALUATION_INITIAL_DELAY_MS:5000}
+    max-retries: ${LEARNING_EVALUATION_MAX_RETRIES:3}
+
+refund:
+  payment:
+    # 当前使用假支付网关，定时任务异步处理；未来替换网关实现即可。
+    worker-delay-ms: ${REFUND_PAYMENT_WORKER_DELAY_MS:2000}
+
+logging:
+  pattern:
+    # requestId 会由 RequestIdFilter 写入 MDC，方便串联 Python 与 Java 日志。
+    level: "%5p [requestId:%X{requestId:-}]"

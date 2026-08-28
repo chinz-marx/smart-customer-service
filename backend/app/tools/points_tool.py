@@ -30,5 +30,12 @@ class PointsQueryTool:
             tool_name=self.name,
             success=True,
             data=data,
-            message=f"已根据{basis}查询到当前积分为1280分，其中120分将在2026-12-31到期。",
+            message=(
+                f"您好，已根据{basis}查询到您的积分情况：\n"
+                "当前积分余额：1280分\n"
+                "即将到期积分：120分\n"
+                "到期时间：2026-12-31\n"
+                "请在到期前及时使用，具体积分变动以业务系统记录为准。"
+            ),
+            direct_answer=True,
         )
