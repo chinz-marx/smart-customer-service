@@ -7,7 +7,7 @@ from app.main import create_app
 
 
 def test_memory_mode_api_flow() -> None:
-    """使用固定测试用户验证聊天、反馈、历史记录和工单接口。"""
+    """人工坐席不可用时仍保存聊天和反馈，但不创建无法处理的工单。"""
     settings = Settings(
         doubao_api_key="YOUR_TEST_KEY",
         session_store_backend="memory",
@@ -30,7 +30,8 @@ def test_memory_mode_api_flow() -> None:
         payload = chat.json()
         assert payload["conversation_id"]
         assert payload["message_id"]
-        assert payload["ticket_id"]
+        assert payload["ticket_id"] is None
+        assert payload["answer"] == "当前人工坐席繁忙，已记录您的问题，请稍后再试"
 
         feedback = client.post(
             "/api/feedback",
@@ -46,7 +47,7 @@ def test_memory_mode_api_flow() -> None:
 
         conversations = client.get("/api/conversations")
         assert conversations.status_code == 200
-        assert conversations.json()[0]["status"] == "handoff"
+        assert conversations.json()[0]["status"] == "active"
 
         messages = client.get(f"/api/conversations/{payload['conversation_id']}/messages")
         assert messages.status_code == 200
@@ -80,12 +81,12 @@ def test_memory_mode_stream_api_persists_completed_answer() -> None:
             events.append((event, json.loads(data)))
 
         assert [event for event, _ in events] == ["delta", "done"]
-        assert "转人工" in str(events[0][1]["content"])
+        assert events[0][1]["content"] == "当前人工坐席繁忙，已记录您的问题，请稍后再试"
 
         done = events[1][1]
         assert done["message_id"]
         assert done["conversation_id"]
-        assert done["ticket_id"]
+        assert done["ticket_id"] is None
 
         messages = client.get(f"/api/conversations/{done['conversation_id']}/messages")
         assert messages.status_code == 200

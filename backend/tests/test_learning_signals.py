@@ -57,7 +57,7 @@ def test_unhelpful_and_negative_rating_keep_two_evidences() -> None:
 
 
 def test_chat_signal_scope_only_contains_confirmed_sources() -> None:
-    """本期不收集普通unknown和连续澄清，只接受已确认的四种聊天侧来源。"""
+    """普通unknown和连续澄清不收集，只接受已确认的聊天侧来源。"""
     service, _ = _service()
     result = ChatOrchestrationResult(
         answer="暂时无法完成查询",
@@ -93,6 +93,21 @@ def test_chat_signal_scope_only_contains_confirmed_sources() -> None:
         LearningSignalType.TOOL_FAILURE,
         LearningSignalType.RAG_MISS,
     }
+
+
+def test_local_human_request_is_asynchronously_saved_without_ticket() -> None:
+    async def scenario() -> None:
+        service, learning = _service()
+
+        response = await service.chat(ChatRequest(message="我要转人工"))
+        await service.close()
+
+        assert response.ticket_id is None
+        assert len(learning.signals) == 1
+        assert learning.signals[0].source_type == LearningSignalType.HUMAN_HANDOFF
+        assert learning.signals[0].question_text == "我要转人工"
+
+    asyncio.run(scenario())
 
 
 class _BatchLearningRepository:

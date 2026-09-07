@@ -9,6 +9,8 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 
 from app.chat_service import ChatApplicationService
+from app.observability.timing import ChatTimingMiddleware
+from app.errors import DialogueConflictError
 from app.config import Settings, get_settings
 from app.infrastructure import create_chat_repository, create_learning_repository, create_session_store
 from app.learning.scheduler import LearningDailyScheduler
@@ -19,6 +21,7 @@ from app.evaluation.release_gate import create_release_evaluation_router
 from app.evaluation.offline_benchmark import create_offline_benchmark_router
 from app.integrations.nacos import NacosClient
 from app.prompts.registry import PromptRegistry
+from app.rules.local_routing import LocalRoutingConfigRegistry
 from app.retrieval.chunk_splitter import create_knowledge_chunk_router
 from app.retrieval.knowledge_publisher import (
     RedisKnowledgePublisher,
@@ -59,11 +62,13 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
         nacos_client = NacosClient(settings) if settings.nacos_enabled else None
         prompt_registry.nacos_client = nacos_client
         await prompt_registry.initialize()
+        local_routing_registry = LocalRoutingConfigRegistry(settings, nacos_client)
         mcp_tool_client = McpToolClient(settings, nacos_client)
         await mcp_tool_client.initialize()
         learning_processor: LearningSignalProcessor | None = None
         learning_scheduler: LearningDailyScheduler | None = None
         try:
+            await local_routing_registry.initialize()
             # 所有需要建立网络连接的组件都放在同一个保护区内。这样 Redis 初始化失败时，
             # 已经建立的 MCP、Nacos 和 HTTP 连接也能被下面的清理逻辑可靠释放。
             await session_store.initialize()
@@ -80,6 +85,7 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
                 )
                 learning_scheduler.start()
         except Exception:
+            await local_routing_registry.close()
             if learning_scheduler is not None:
                 await learning_scheduler.close()
             if learning_processor is not None:
@@ -103,6 +109,7 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
         app.state.semantic_answer_service = semantic_answer_service
         app.state.knowledge_publisher = knowledge_publisher
         app.state.prompt_registry = prompt_registry
+        app.state.local_routing_registry = local_routing_registry
         app.state.mcp_tool_client = mcp_tool_client
         app.state.chat_service = ChatApplicationService(
             settings,
@@ -112,10 +119,15 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
             prompt_registry,
             mcp_tool_client,
             learning_repository,
+            local_routing_registry,
         )
         try:
+            # 客户端和结构化输出适配器在启动阶段准备，首轮用户请求直接复用。
+            app.state.chat_service.agent.orchestrator.understanding_service.initialize()
             yield
         finally:
+            await app.state.chat_service.close()
+            await local_routing_registry.close()
             if learning_scheduler is not None:
                 await learning_scheduler.close()
             if learning_processor is not None:
@@ -131,6 +143,7 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
                 await nacos_client.close()
 
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
+    app.add_middleware(ChatTimingMiddleware)
     app.include_router(create_knowledge_chunk_router())
     app.include_router(create_knowledge_router(settings))
     app.include_router(create_question_generation_router(settings, prompt_registry))
@@ -178,6 +191,7 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
             "semantic_search": "enabled" if settings.semantic_search_enabled else "disabled",
             "semantic_search_status": "ok" if semantic_ok else "error",
             "prompt_source": request.app.state.prompt_registry.source,
+            "local_rule_source": request.app.state.local_routing_registry.source,
             "mcp": "enabled" if settings.mcp_enabled else "disabled",
             "mcp_status": "ok" if mcp_ok else "error",
             "mcp_tools": ",".join(tool["name"] for tool in mcp_client.catalog()),
@@ -196,6 +210,8 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
         service: ChatApplicationService = request.app.state.chat_service
         try:
             return await service.chat(payload)
+        except DialogueConflictError as exc:
+            raise HTTPException(status_code=409, detail=str(exc)) from exc
         except ValueError as exc:
             raise HTTPException(status_code=404, detail=str(exc)) from exc
         except Exception:

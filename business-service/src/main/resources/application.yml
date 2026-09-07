@@ -90,6 +90,15 @@ customer:
   # 正式认证接入前与Python客服链路保持同一个测试用户。
   demo-user-id: ${DEMO_USER_ID:demo-user-001}
 
+business:
+  redis:
+    tcp-keepalive:
+      # 防止远程Redis连接被NAT或防火墙静默回收；生产环境可按网络策略覆盖。
+      enabled: ${BUSINESS_REDIS_TCP_KEEPALIVE_ENABLED:true}
+      idle: ${BUSINESS_REDIS_TCP_KEEPALIVE_IDLE:30s}
+      interval: ${BUSINESS_REDIS_TCP_KEEPALIVE_INTERVAL:10s}
+      count: ${BUSINESS_REDIS_TCP_KEEPALIVE_COUNT:3}
+
 learning:
   evaluation:
     # 自动发布验收使用数据库原子认领，多个 Java 实例同时启动也只会有一个实例执行同一批次。

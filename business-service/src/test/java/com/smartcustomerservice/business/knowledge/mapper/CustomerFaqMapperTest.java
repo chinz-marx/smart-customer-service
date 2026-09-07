@@ -20,7 +20,10 @@ class CustomerFaqMapperTest {
 
         assertThat(listSql)
                 .contains("DISTINCT ON (c.content_hash)")
-                .contains("q.question_no ASC");
-        assertThat(countSql).contains("COUNT(DISTINCT c.content_hash)");
+                .contains("q.question_no ASC")
+                .contains("category.category_code = 'faq'");
+        assertThat(countSql)
+                .contains("COUNT(DISTINCT c.content_hash)")
+                .contains("category.category_code = 'faq'");
     }
 }

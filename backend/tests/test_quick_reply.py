@@ -108,3 +108,37 @@ def test_matcher_uses_full_sentence_matching() -> None:
     assert matcher.match("您好。") is not None
     assert matcher.match("您好，我要申请退款") is None
     assert matcher.match("你好不好") is None
+
+
+@pytest.mark.parametrize("message", ["转人工", "我要找真人处理", "麻烦联系人工客服"])
+def test_explicit_human_request_uses_local_unavailable_reply(message: str) -> None:
+    agent = CustomerServiceAgent(
+        Settings(nacos_enabled=False),
+        understanding_service=FailUnderstandingService(),
+    )
+
+    result = asyncio.run(agent.handle(message, None, []))
+
+    assert result.intent == "human_handoff"
+    assert result.decision_action == "human_unavailable"
+    assert result.answer == "当前人工坐席繁忙，已记录您的问题，请稍后再试"
+
+
+@pytest.mark.parametrize("message", ["客服态度很差", "我要投诉你们的客服服务"])
+def test_explicit_complaint_uses_local_unavailable_reply(message: str) -> None:
+    agent = CustomerServiceAgent(
+        Settings(nacos_enabled=False),
+        understanding_service=FailUnderstandingService(),
+    )
+
+    result = asyncio.run(agent.handle(message, None, []))
+
+    assert result.intent == "complaint"
+    assert result.emotion == "negative"
+    assert result.decision_action == "human_unavailable"
+
+
+def test_artificial_intelligence_question_does_not_trigger_human_rule() -> None:
+    matcher = QuickReplyMatcher()
+
+    assert matcher.match("人工智能是什么") is None

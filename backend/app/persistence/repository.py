@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import uuid
+from datetime import datetime
 from typing import Protocol
 
 from app.persistence.domain import (
@@ -37,10 +38,17 @@ class ChatRepository(Protocol):
         intent_confidence: float | None = None,
         provider: str | None = None,
         latency_ms: float | None = None,
+        message_id: str | None = None,
+        created_at: datetime | None = None,
     ) -> MessageRecord:
         """保存一条消息。"""
 
-    async def list_conversations(self, user_id: str, limit: int = 20) -> list[ConversationRecord]:
+    async def list_conversations(
+        self,
+        user_id: str,
+        limit: int = 20,
+        updated_after: datetime | None = None,
+    ) -> list[ConversationRecord]:
         """查询用户最近的对话。"""
 
     async def list_messages(
@@ -129,13 +137,15 @@ class InMemoryChatRepository:
         intent_confidence: float | None = None,
         provider: str | None = None,
         latency_ms: float | None = None,
+        message_id: str | None = None,
+        created_at: datetime | None = None,
     ) -> MessageRecord:
         """保存消息，并刷新所属对话的更新时间。"""
         conversation = self.conversations.get(conversation_id)
         if conversation is None:
             raise ValueError("对话不存在")
         record = MessageRecord(
-            id=str(uuid.uuid4()),
+            id=message_id or str(uuid.uuid4()),
             conversation_id=conversation_id,
             role=role,
             content=content,
@@ -144,14 +154,25 @@ class InMemoryChatRepository:
             intent_confidence=intent_confidence,
             provider=provider,
             latency_ms=latency_ms,
+            created_at=created_at or utc_now(),
         )
         self.messages[record.id] = record
         conversation.updated_at = utc_now()
         return record
 
-    async def list_conversations(self, user_id: str, limit: int = 20) -> list[ConversationRecord]:
+    async def list_conversations(
+        self,
+        user_id: str,
+        limit: int = 20,
+        updated_after: datetime | None = None,
+    ) -> list[ConversationRecord]:
         """按最后更新时间倒序返回当前用户的对话。"""
-        rows = [item for item in self.conversations.values() if item.user_id == user_id]
+        rows = [
+            item
+            for item in self.conversations.values()
+            if item.user_id == user_id
+            and (updated_after is None or item.updated_at >= updated_after)
+        ]
         rows.sort(key=lambda item: item.updated_at, reverse=True)
         return rows[:limit]
 

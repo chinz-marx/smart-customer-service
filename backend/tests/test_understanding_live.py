@@ -40,14 +40,14 @@ def _live_settings(
     return settings
 
 
-def test_live_model_connectivity_and_json_output() -> None:
-    """只发起一次直连请求，确认Key、模型名、地址和JSON解析都可用。"""
+def test_live_model_connectivity_and_json_schema_output() -> None:
+    """只发起一次直连请求，确认当前供应商支持六字段JSON Schema。"""
 
     async def scenario() -> None:
         settings = _live_settings(mode="llm", understanding_timeout_seconds=30)
         service = UnderstandingService(settings)
         result = await service.understand(
-            message="帮我查下积分，手机号后四位是1234",
+            message="积分有效期多久？",
             history=[],
             current_intent=None,
             current_slots={},
@@ -55,8 +55,10 @@ def test_live_model_connectivity_and_json_output() -> None:
 
         print("模型直连 =>", result.model_dump(exclude={"error_message"}))
         assert result.source == "llm", result.error_message
-        assert result.intent == "points_query"
-        assert result.slots.get("phone_tail") == "1234"
+        assert result.intent == "knowledge_query"
+        assert result.route_type == "knowledge"
+        assert result.requires_knowledge is True
+        assert result.slots == {}
 
     asyncio.run(scenario())
 

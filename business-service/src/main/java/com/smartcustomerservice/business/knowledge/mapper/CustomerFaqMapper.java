@@ -22,6 +22,8 @@ public interface CustomerFaqMapper {
               JOIN business.kb_knowledge_chunk c ON c.id = q.chunk_id
               JOIN business.kb_knowledge k
                 ON k.id = q.knowledge_id AND k.current_version_id = q.version_id
+              JOIN business.kb_category category
+                ON category.id = k.category_id AND category.category_code = 'faq'
               JOIN business.kb_knowledge_version v ON v.id = q.version_id
               WHERE k.status = 1
                 AND v.version_status = 2
@@ -47,6 +49,8 @@ public interface CustomerFaqMapper {
             JOIN business.kb_knowledge_chunk c ON c.id = q.chunk_id
             JOIN business.kb_knowledge k
               ON k.id = q.knowledge_id AND k.current_version_id = q.version_id
+            JOIN business.kb_category category
+              ON category.id = k.category_id AND category.category_code = 'faq'
             JOIN business.kb_knowledge_version v ON v.id = q.version_id
             WHERE k.status = 1
               AND v.version_status = 2
@@ -61,6 +65,8 @@ public interface CustomerFaqMapper {
             JOIN business.kb_knowledge_chunk c ON c.id = q.chunk_id
             JOIN business.kb_knowledge k
               ON k.id = q.knowledge_id AND k.current_version_id = q.version_id
+            JOIN business.kb_category category
+              ON category.id = k.category_id AND category.category_code = 'faq'
             JOIN business.kb_knowledge_version v ON v.id = q.version_id
             WHERE q.id = #{questionId}
               AND k.status = 1

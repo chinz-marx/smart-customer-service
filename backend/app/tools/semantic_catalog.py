@@ -42,6 +42,7 @@ class RedisToolSemanticCatalog:
         self._redis = Redis.from_url(
             self.settings.redis_url,
             decode_responses=False,
+            socket_keepalive=True,
             health_check_interval=30,
             socket_connect_timeout=5,
             socket_timeout=8,

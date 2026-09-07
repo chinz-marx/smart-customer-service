@@ -4,7 +4,16 @@ import pytest
 from pydantic import ValidationError
 
 from app.retrieval.chunk_splitter import KnowledgeTextSplitter
-from app.retrieval.knowledge_publisher import KnowledgePublishRequest
+from app.retrieval.knowledge_publisher import (
+    KnowledgePublishRequest,
+    is_customer_faq_category,
+)
+
+
+def test_only_faq_category_publishes_customer_question_map() -> None:
+    assert is_customer_faq_category("FAQ") is True
+    assert is_customer_faq_category(" faq ") is True
+    assert is_customer_faq_category("活动规则") is False
 
 
 def test_short_faq_keeps_complete_answer() -> None:

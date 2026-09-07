@@ -3,10 +3,12 @@ from __future__ import annotations
 from app.config import Settings
 from app.llm.generator import AnswerChunkCallback
 from app.prompts.registry import PromptRegistry
+from app.rules.local_routing import LocalRoutingConfigRegistry
 from app.orchestrator import ChatOrchestrationResult, CustomerServiceOrchestrator
 from app.retrieval.service import SemanticAnswerService
+from app.rules.quick_reply import QuickReply
 from app.schemas import ChatHistoryItem
-from app.session.store import SessionStore
+from app.session.store import ConversationState, SessionStore
 from app.tools.mcp_client import McpToolClient
 from app.understanding.service import UnderstandingService
 
@@ -25,6 +27,7 @@ class CustomerServiceAgent:
         semantic_answer_service: SemanticAnswerService | None = None,
         prompt_registry: PromptRegistry | None = None,
         mcp_tool_client: McpToolClient | None = None,
+        local_routing_registry: LocalRoutingConfigRegistry | None = None,
     ) -> None:
         # 允许测试注入假的理解服务，避免单元测试发起真实模型请求。
         self.orchestrator = CustomerServiceOrchestrator(
@@ -34,7 +37,12 @@ class CustomerServiceAgent:
             semantic_answer_service=semantic_answer_service,
             prompt_registry=prompt_registry,
             mcp_tool_client=mcp_tool_client,
+            local_routing_registry=local_routing_registry,
         )
+
+    def match_quick_reply(self, message: str) -> QuickReply | None:
+        """在进入Redis、PostgreSQL和模型链路前识别确定性回复。"""
+        return self.orchestrator.match_quick_reply(message)
 
     async def handle(
         self,
@@ -44,6 +52,8 @@ class CustomerServiceAgent:
         conversation_id: str | None = None,
         user_id: str | None = None,
         on_answer_chunk: AnswerChunkCallback | None = None,
+        request_id: str | None = None,
+        state: ConversationState | None = None,
     ) -> ChatOrchestrationResult:
         """返回包含意图、决策和耗时的完整结果，供持久化层使用。"""
         return await self.orchestrator.handle(
@@ -53,6 +63,8 @@ class CustomerServiceAgent:
             conversation_id=conversation_id,
             user_id=user_id,
             on_answer_chunk=on_answer_chunk,
+            request_id=request_id,
+            state=state,
         )
 
     async def reply(

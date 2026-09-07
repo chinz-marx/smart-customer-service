@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.observability.timing import timed
 
 import logging
 import re
@@ -100,6 +101,7 @@ class RedisSemanticAnswerService:
             self.settings.redis_url,
             decode_responses=False,
             # 语义检索连接可能长时间空闲，使用健康检查和超时重试淘汰失效连接。
+            socket_keepalive=True,
             health_check_interval=30,
             socket_connect_timeout=5,
             socket_timeout=8,
@@ -108,6 +110,7 @@ class RedisSemanticAnswerService:
         await self._redis.ping()
         await self._ensure_indexes()
 
+    @timed("knowledge.lookup")
     async def lookup(self, question: str, intent: str) -> SemanticLookup:
         """先查审核知识，再查短期LangCache，并复用同一个问题向量。"""
         if intent not in self.settings.semantic_cache_intent_set:

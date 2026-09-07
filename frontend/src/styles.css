@@ -131,6 +131,7 @@ button:focus-visible, textarea:focus-visible {
 .panel-section { padding: 0 2px; }
 .section-title-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; min-height: 28px; }
 .section-title-row h2 { color: var(--cs-ink); font-size: 14px; font-weight: 720; }
+.history-window-label { margin-left: 5px; color: var(--cs-subtle); font-size: 11px; font-weight: 500; }
 .icon-button, .swap-button { border: 0; color: var(--cs-muted); background: transparent; }
 .icon-button { display: grid; place-items: center; width: 30px; height: 30px; padding: 0; border-radius: 7px; }
 .icon-button:hover, .swap-button:hover:not(:disabled) { color: var(--cs-primary); background: var(--cs-primary-soft); }

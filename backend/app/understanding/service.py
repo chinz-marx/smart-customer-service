@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import logging
 import re
 from typing import Any
 
@@ -10,6 +11,8 @@ from langchain_openai import ChatOpenAI
 from pydantic import ValidationError
 
 from app.config import Settings
+from app.observability.timing import measured, stage
+from app.dialogue.schemas import ContextModelOutput, context_output_json_schema
 from app.configs.loader import load_runtime_config
 from app.errors import safe_error_message
 from app.intent.classifier import IntentClassifier
@@ -17,7 +20,14 @@ from app.prompts.registry import PromptRegistry
 from app.schemas import ChatHistoryItem
 from app.tools.mcp_client import McpToolClient
 from app.understanding.prompt import SYSTEM_ROUTE_CODES, build_user_payload
-from app.understanding.schemas import UnderstandingResult
+from app.understanding.schemas import (
+    UnderstandingModelOutput,
+    UnderstandingResult,
+    understanding_output_json_schema,
+)
+
+
+logger = logging.getLogger("smart_customer_service.understanding")
 
 
 class UnderstandingService:
@@ -40,6 +50,94 @@ class UnderstandingService:
         self.mcp_tool_client = mcp_tool_client
         # 一个服务实例复用同一个LangChain客户端，复用HTTP连接并减少握手开销。
         self._llm: ChatOpenAI | None = None
+        self._structured_llm: Any | None = None
+        self._context_llm: Any | None = None
+
+    def initialize(self) -> None:
+        """Prepare local client/JSON adapter before accepting requests; no model call."""
+        if self.settings.understanding_mode != "keyword" and self.settings.has_real_understanding_api_key:
+            self._get_context_llm()
+
+    def _get_context_llm(self) -> Any:
+        if self._context_llm is None:
+            self._context_llm = self._get_llm().with_structured_output(
+                context_output_json_schema(), method="json_schema", strict=False,
+            )
+        return self._context_llm
+
+    async def understand_context(
+        self, message: str, history: list[ChatHistoryItem], current_intent: str | None,
+        current_slots: dict[str, str], current_tool: str | None, context: dict,
+    ) -> UnderstandingResult:
+        """One bounded model call for continuation AND routing; no model retry cascade."""
+        if self.settings.understanding_mode == "keyword" or not self.settings.has_real_understanding_api_key:
+            if (current_tool or context["frames"]) and re.search(r"不对|不是|更正|刚才|那个|它|第.+个|先.+再", message):
+                return self._llm_error_result("上下文存在歧义且理解模型不可用")
+            return await self.understand(message, history, current_intent, current_slots, current_tool)
+        try:
+            async with asyncio.timeout(self.settings.understanding_timeout_seconds):
+                catalog = []
+                if self.mcp_tool_client:
+                    try:
+                        async with asyncio.timeout(self.settings.context_candidate_timeout_seconds):
+                            catalog = await measured("understanding.candidates", self.mcp_tool_client.candidate_catalog(message, current_tool))
+                    except TimeoutError:
+                        catalog = self.mcp_tool_client.catalog()
+                # Include the active and referenced tasks even when semantic recall misses them.
+                for name in [current_tool] + [f["tool"] for f in context["frames"]]:
+                    definition = self.mcp_tool_client.get_tool(name) if self.mcp_tool_client else None
+                    if definition and not any(t["name"] == name for t in catalog):
+                        catalog.append(definition.prompt_payload())
+                with stage("understanding.client.prepare"):
+                    self._get_context_llm()
+                payload = {
+                    "message": message, "context": context, "tools": catalog,
+                    "system_targets": sorted(SYSTEM_ROUTE_CODES),
+                    "history": [{"role": h.role, "content": h.content} for h in history[-4:]],
+                }
+                raw = await measured("understanding.model", self._context_llm.ainvoke([
+                    SystemMessage(content=self.prompt_registry.get("smart-customer-context-system")),
+                    HumanMessage(content=json.dumps(payload, ensure_ascii=False, separators=(",", ":"))),
+                ]))
+                output = ContextModelOutput.model_validate(raw)
+                return self._expand_context_output(output, context)
+        except Exception as exc:
+            logger.warning("上下文解析失败，使用本地降级: %s", type(exc).__name__)
+            if current_tool or context["frames"]:
+                return self._llm_error_result(safe_error_message(exc))
+            if self.settings.understanding_mode == "hybrid":
+                return self._keyword_fallback(message, safe_error_message(exc), current_intent, current_tool)
+            return self._llm_error_result(safe_error_message(exc))
+
+    def _expand_context_output(self, output: ContextModelOutput, context: dict) -> UnderstandingResult:
+        target = output.target
+        frame_id = None
+        if target and target.startswith("frame:"):
+            frame = next((f for f in context["frames"] if f["ref"] == target), None)
+            if frame is None:
+                raise ValueError("模型返回未知任务引用")
+            frame_id = target[6:]
+            target = frame["tool"]
+        if output.act in {"inform", "correct", "resume", "cancel"} and target is None:
+            target = context.get("tool")
+        if output.act == "unknown" or target is None:
+            return UnderstandingResult(intent="unknown", needs_clarification=True, dialogue_act="unknown")
+        if target in SYSTEM_ROUTE_CODES:
+            return UnderstandingResult(intent=target, confidence=1.0, route_type="system", dialogue_act=output.act)
+        if target == "knowledge":
+            return UnderstandingResult(
+                intent="knowledge_query", confidence=1.0, route_type="knowledge", requires_knowledge=True,
+                knowledge_query=output.query, dialogue_act=output.act, target_frame_id=frame_id,
+            )
+        if not self.mcp_tool_client or not self.mcp_tool_client.get_tool(target):
+            raise ValueError("模型返回未知工具")
+        return UnderstandingResult(
+            # Compatibility gate marker, not a calibrated probability from the model.
+            intent=target, confidence=1.0, route_type="composite" if output.query else "tool",
+            requires_tool=True, requires_knowledge=bool(output.query), tool_name=target,
+            tool_arguments=output.values, knowledge_query=output.query,
+            dialogue_act=output.act, target_frame_id=frame_id,
+        )
 
     async def understand(
         self,
@@ -113,6 +211,12 @@ class UnderstandingService:
             return result
         except Exception as exc:
             error_message = safe_error_message(exc)
+            logger.warning(
+                "理解模型调用失败，准备执行%s降级: error_type=%s, error=%s",
+                self.settings.understanding_mode,
+                type(exc).__name__,
+                error_message,
+            )
             if self.settings.understanding_mode == "hybrid":
                 return self._keyword_fallback(
                     message,
@@ -171,12 +275,8 @@ class UnderstandingService:
         current_slots: dict[str, str],
         current_tool: str | None = None,
         available_tools_override: list[dict[str, Any]] | None = None,
-    ) -> str:
-        """调用OpenAI兼容模型并返回纯文本内容。
-
-        这里没有依赖供应商专有的JSON Schema参数，避免豆包兼容接口不支持时调用失败；
-        返回内容仍会在_parse_result中经过严格JSON解析和Pydantic校验。
-        """
+    ) -> UnderstandingModelOutput:
+        """通过供应商原生JSON Schema调用理解模型并返回六字段结果。"""
         runtime_config = load_runtime_config()
         # Redis Search 只提供候选 Tool，最终选择、参数提取和组合检索判断仍由 LLM 完成。
         available_tools = available_tools_override
@@ -186,12 +286,12 @@ class UnderstandingService:
                 if self.mcp_tool_client is not None
                 else []
             )
-        llm = self._get_llm()
-        result = await llm.ainvoke(
+        structured_llm = self._get_structured_llm()
+        result = await structured_llm.ainvoke(
             [
                 SystemMessage(
                     content=self.prompt_registry.get(
-                        "smart-customer-understanding-system"
+                        "smart-customer-understanding-routing-v2-system"
                     )
                 ),
                 HumanMessage(
@@ -207,35 +307,71 @@ class UnderstandingService:
                 ),
             ]
         )
-        return self._message_content_to_text(result.content)
+        return UnderstandingModelOutput.model_validate(result)
 
     def _get_llm(self) -> ChatOpenAI:
         """延迟创建并复用模型客户端，避免每轮会话重复建立HTTP连接。"""
         if self._llm is None:
+            model = self.settings.effective_understanding_model
             self._llm = ChatOpenAI(
                 api_key=self.settings.understanding_api_key,
                 base_url=self.settings.understanding_base_url,
-                model=self.settings.effective_understanding_model,
+                model=model,
                 temperature=self.settings.understanding_temperature,
                 timeout=self.settings.understanding_timeout_seconds,
-                max_retries=self.settings.doubao_max_retries,
+                max_retries=0,
+                # DeepSeek Responses defaults to high-effort thinking. Context parsing
+                # emits four small fields and must not spend the request budget on it.
+                reasoning={"effort": "none"} if self._requires_responses_api(model) else None,
+                # DeepSeek的Chat Completions仅支持json_object；v4-flash需要走
+                # Responses API才能使用真正的json_schema结构化输出。
+                use_responses_api=self._requires_responses_api(model),
             )
         return self._llm
 
-    def _parse_result(self, content: str) -> UnderstandingResult:
+    def _requires_responses_api(self, model: str) -> bool:
+        """仅为官方明确支持Responses API的DeepSeek Flash模型切换端点。"""
+        base_url = self.settings.understanding_base_url.rstrip("/").lower()
+        return base_url == "https://api.deepseek.com" and model == "deepseek-v4-flash"
+
+    def _get_structured_llm(self) -> Any:
+        """缓存JSON Schema Runnable，避免每轮重复构造结构化输出适配器。"""
+        if self._structured_llm is None:
+            self._structured_llm = self._get_llm().with_structured_output(
+                understanding_output_json_schema(),
+                method="json_schema",
+                # MCP参数名来自动态Java Schema，不能在静态输出Schema中枚举。
+                strict=False,
+            )
+        return self._structured_llm
+
+    def _parse_result(
+        self,
+        content: str | dict[str, Any] | UnderstandingModelOutput,
+    ) -> UnderstandingResult:
         """从模型文本中提取JSON并校验意图编码。
 
         部分兼容模型偶尔会包一层```json代码块，所以先定位首尾花括号；
         但不会尝试修复错误JSON，错误内容应进入可观测的兜底分支。
         """
-        start = content.find("{")
-        end = content.rfind("}")
-        if start < 0 or end <= start:
-            raise ValueError("模型没有返回JSON对象")
-
         try:
-            payload = json.loads(content[start : end + 1])
-            result = UnderstandingResult.model_validate(payload)
+            if isinstance(content, UnderstandingModelOutput):
+                payload = content.model_dump()
+            elif isinstance(content, dict):
+                payload = content
+            else:
+                start = content.find("{")
+                end = content.rfind("}")
+                if start < 0 or end <= start:
+                    raise ValueError("模型没有返回JSON对象")
+                payload = json.loads(content[start : end + 1])
+
+            if "route" in payload:
+                model_output = UnderstandingModelOutput.model_validate(payload)
+                result = self._expand_model_output(model_output)
+            else:
+                # 仅保留对已进入进程或回归样本中的V1结果兼容；线上模型只接收V2 Schema。
+                result = UnderstandingResult.model_validate(payload)
         except (json.JSONDecodeError, ValidationError) as exc:
             raise ValueError(f"模型结构化输出校验失败：{safe_error_message(exc)}") from exc
 
@@ -290,6 +426,20 @@ class UnderstandingService:
                 "route_type": route_type,
             }
         )
+
+        # 纯知识请求只执行知识检索。旧模型可能返回activity_rules、points_rules等
+        # 细分意图，甚至残留无效Tool字段；统一清理后可避免误走legacy或Tool链路，
+        # 也不会因此触发额外的回答模型调用。
+        if requires_knowledge and not requires_tool:
+            result = result.model_copy(
+                update={
+                    "intent": "knowledge_query",
+                    "route_type": "knowledge",
+                    "tool_name": None,
+                    "tool_arguments": {},
+                }
+            )
+
         if result.tool_name:
             definition = (
                 self.mcp_tool_client.get_tool(result.tool_name)
@@ -305,9 +455,51 @@ class UnderstandingService:
         # 业务意图后，状态、日志和评测不会同时保存两套可能冲突的业务编码。
         if result.route_type in {"tool", "composite"} and result.tool_name:
             result = result.model_copy(update={"intent": result.tool_name})
-        elif result.route_type == "knowledge" and result.intent not in SYSTEM_ROUTE_CODES:
+        elif result.route_type == "knowledge":
             result = result.model_copy(update={"intent": "knowledge_query"})
         return result.model_copy(update={"source": "llm", "error_message": None})
+
+    def _expand_model_output(self, output: UnderstandingModelOutput) -> UnderstandingResult:
+        """由六字段模型结果确定性推导内部兼容结构。"""
+        if output.route in SYSTEM_ROUTE_CODES:
+            intent = output.route
+            route_type = "system"
+            requires_tool = False
+            requires_knowledge = False
+        elif output.route == "tool":
+            intent = output.tool or "unknown"
+            route_type = "tool"
+            requires_tool = True
+            requires_knowledge = False
+        elif output.route == "knowledge":
+            intent = "knowledge_query"
+            route_type = "knowledge"
+            requires_tool = False
+            requires_knowledge = True
+        elif output.route == "composite":
+            intent = output.tool or "unknown"
+            route_type = "composite"
+            requires_tool = True
+            requires_knowledge = True
+        else:
+            intent = "unknown"
+            route_type = "unknown"
+            requires_tool = False
+            requires_knowledge = False
+
+        return UnderstandingResult(
+            intent=intent,
+            confidence=output.confidence,
+            slots={},
+            risk_level=output.risk,
+            needs_clarification=output.route == "unknown",
+            requires_tool=requires_tool,
+            requires_knowledge=requires_knowledge,
+            route_type=route_type,
+            tool_name=output.tool if requires_tool else None,
+            tool_arguments=output.arguments if requires_tool else {},
+            knowledge_query=output.knowledge_query if requires_knowledge else None,
+        )
 
     def _keyword_fallback(
         self,
@@ -418,18 +610,3 @@ class UnderstandingService:
             source="llm-error",
             error_message=error_message,
         )
-
-    def _message_content_to_text(self, content: Any) -> str:
-        """兼容LangChain返回字符串或多模态文本分块。"""
-        if isinstance(content, str):
-            return content
-        if isinstance(content, list):
-            parts: list[str] = []
-            for block in content:
-                if isinstance(block, str):
-                    parts.append(block)
-                elif isinstance(block, dict) and isinstance(block.get("text"), str):
-                    parts.append(block["text"])
-            if parts:
-                return "".join(parts)
-        return str(content)

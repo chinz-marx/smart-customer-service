@@ -499,7 +499,7 @@ function switchModule(module: AdminModule) {
             <label><span>意图编码</span><input v-model="form.intentCode" maxlength="64" placeholder="例如 refund_request" required /><small>用于知识召回路由，建议使用英文下划线格式</small></label>
           </div>
           <label>知识内容<textarea v-model="form.content" rows="6" required /></label>
-          <KnowledgeChunkEditor v-model="chunkDrafts" :content="form.content" :title="form.title" />
+          <KnowledgeChunkEditor v-model="chunkDrafts" v-model:content="form.content" :title="form.title" />
           <label>标签<input v-model="form.tags" placeholder="多个标签用逗号分隔" /></label>
           <div class="form-grid"><label>生效时间<input v-model="form.effectiveAt" type="datetime-local" required /></label><label>失效时间<input v-model="form.expiredAt" type="datetime-local" /></label></div>
           <label>申请说明<textarea v-model="form.applicationReason" rows="3" maxlength="1000" placeholder="说明本次新增或修改原因" /></label>

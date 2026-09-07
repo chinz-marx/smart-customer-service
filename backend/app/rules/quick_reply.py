@@ -3,6 +3,8 @@ from __future__ import annotations
 import re
 from dataclasses import dataclass
 
+from app.rules.local_routing import LocalRoutingConfigRegistry
+
 
 @dataclass(frozen=True, slots=True)
 class QuickReply:
@@ -12,6 +14,7 @@ class QuickReply:
     answer: str
     suggestions: tuple[str, ...]
     reason: str
+    action: str = "quick_reply"
 
 
 class QuickReplyMatcher:
@@ -72,6 +75,13 @@ class QuickReplyMatcher:
         }
     )
 
+    def __init__(
+        self,
+        local_routing_registry: LocalRoutingConfigRegistry | None = None,
+    ) -> None:
+        self.local_routing_registry = local_routing_registry
+        self._local_default = LocalRoutingConfigRegistry.local_default()
+
     def match(self, text: str) -> QuickReply | None:
         """返回整句命中的快捷回复；业务复合句返回 ``None``。"""
         normalized = self._END_PUNCTUATION.sub("", text.strip()).lower()
@@ -82,6 +92,21 @@ class QuickReplyMatcher:
             return self.for_intent("system_identity")
         if normalized in self._CAPABILITY_QUESTIONS:
             return self.for_intent("system_capability")
+
+        config = (
+            self.local_routing_registry.config
+            if self.local_routing_registry is not None
+            else self._local_default
+        )
+        local_intent = config.match(normalized)
+        if local_intent is not None:
+            return QuickReply(
+                intent=local_intent,
+                answer=config.reply,
+                suggestions=(),
+                reason=f"{local_intent}_local_rule",
+                action="human_unavailable",
+            )
         return None
 
     def match_pending_cancellation(self, text: str) -> QuickReply | None:

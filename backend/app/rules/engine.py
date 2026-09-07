@@ -5,6 +5,7 @@ from dataclasses import dataclass, field
 from app.configs.loader import load_runtime_config
 from app.intent.schemas import IntentResult
 from app.preprocessing.normalizer import PreprocessResult
+from app.rules.local_routing import DEFAULT_UNAVAILABLE_REPLY
 from app.session.store import ConversationState
 from app.slots.manager import SlotManager
 
@@ -51,10 +52,10 @@ class RuleEngine:
         # 明确的人工诉求属于执行策略，优先于普通澄清，避免让用户重复要求转人工。
         if intent.intent == "human_handoff":
             return RouteDecision(
-                action="handoff",
-                answer="好的，我已为您记录转人工诉求。稍后会把当前问题和上下文一并交给人工客服继续处理。",
-                suggestions=self._suggestions_for_intent(intent.intent),
-                reason="human_handoff_intent",
+                action="human_unavailable",
+                answer=DEFAULT_UNAVAILABLE_REPLY,
+                suggestions=[],
+                reason="human_handoff_unavailable",
             )
 
         # 模型明确表示需要澄清时，即使给出了猜测意图，也不能贸然执行Tool。

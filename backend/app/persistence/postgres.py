@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.observability.timing import timed
 
 from datetime import datetime
 from typing import Any
@@ -12,8 +13,10 @@ from sqlalchemy import (
     String,
     Text,
     UniqueConstraint,
+    func,
     select,
     text,
+    update,
 )
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.ext.asyncio import AsyncEngine, async_sessionmaker, create_async_engine
@@ -169,6 +172,7 @@ class PostgresChatRepository:
             else:
                 await connection.execute(text("SELECT 1"))
 
+    @timed("db.conversation.resolve")
     async def get_or_create_conversation(
         self,
         user_id: str,
@@ -209,6 +213,7 @@ class PostgresChatRepository:
             await session.refresh(model)
             return _conversation_record(model)
 
+    @timed(lambda *a, **k: "db.message." + k.get("role", a[2] if len(a) > 2 else "unknown") + ".write")
     async def add_message(
         self,
         conversation_id: str,
@@ -219,16 +224,25 @@ class PostgresChatRepository:
         intent_confidence: float | None = None,
         provider: str | None = None,
         latency_ms: float | None = None,
+        message_id: str | None = None,
+        created_at: datetime | None = None,
     ) -> MessageRecord:
         """在一个事务中保存消息并刷新会话更新时间。"""
         import uuid
 
         async with self.session_factory() as session:
-            conversation = await session.get(ConversationModel, conversation_id)
-            if conversation is None:
+            message_time = created_at or utc_now()
+            # The request already resolved this conversation. Update metadata
+            # directly instead of reading it again for each user/assistant insert.
+            changed = await session.execute(
+                update(ConversationModel)
+                .where(ConversationModel.id == conversation_id)
+                .values(updated_at=func.greatest(ConversationModel.updated_at, message_time))
+            )
+            if changed.rowcount == 0:
                 raise ValueError("对话不存在")
             model = MessageModel(
-                id=str(uuid.uuid4()),
+                id=message_id or str(uuid.uuid4()),
                 conversation_id=conversation_id,
                 role=role,
                 content=content,
@@ -237,25 +251,30 @@ class PostgresChatRepository:
                 intent_confidence=intent_confidence,
                 provider=provider,
                 latency_ms=latency_ms,
+                created_at=message_time,
             )
-            conversation.updated_at = utc_now()
             session.add(model)
             await session.commit()
-            await session.refresh(model)
+            # ID and creation time were reserved before dispatch; no SELECT is
+            # needed to recover them after commit (expire_on_commit=False).
             return _message_record(model)
 
-    async def list_conversations(self, user_id: str, limit: int = 20) -> list[ConversationRecord]:
+    async def list_conversations(
+        self,
+        user_id: str,
+        limit: int = 20,
+        updated_after: datetime | None = None,
+    ) -> list[ConversationRecord]:
         """返回用户最近更新的对话。"""
         async with self.session_factory() as session:
-            statement = (
-                select(ConversationModel)
-                .where(ConversationModel.user_id == user_id)
-                .order_by(ConversationModel.updated_at.desc())
-                .limit(limit)
-            )
+            statement = select(ConversationModel).where(ConversationModel.user_id == user_id)
+            if updated_after is not None:
+                statement = statement.where(ConversationModel.updated_at >= updated_after)
+            statement = statement.order_by(ConversationModel.updated_at.desc()).limit(limit)
             rows = (await session.scalars(statement)).all()
             return [_conversation_record(row) for row in rows]
 
+    @timed("db.history.read")
     async def list_messages(
         self,
         conversation_id: str,

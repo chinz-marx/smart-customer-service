@@ -19,7 +19,7 @@ def create_session_store(settings: Settings) -> SessionStore:
             ttl_seconds=settings.redis_session_ttl_seconds,
             key_prefix=settings.redis_session_key_prefix,
         )
-    return InMemorySessionStore()
+    return InMemorySessionStore(settings.redis_session_ttl_seconds)
 
 
 def create_chat_repository(settings: Settings) -> ChatRepository:

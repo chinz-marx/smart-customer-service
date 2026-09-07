@@ -83,5 +83,5 @@ def test_human_handoff_rule(local_settings: Settings) -> None:
 
     answer, _, _, suggestions = asyncio.run(agent.reply("我要转人工", None, []))
 
-    assert "转人工诉求" in answer
-    assert "继续描述问题" in suggestions
+    assert answer == "当前人工坐席繁忙，已记录您的问题，请稍后再试"
+    assert suggestions == []

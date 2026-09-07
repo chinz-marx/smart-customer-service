@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.observability.timing import timed, timed_lock
 
 import asyncio
 import time
@@ -6,6 +7,8 @@ import uuid
 from dataclasses import dataclass, field
 
 from app.config import Settings
+from app.dialogue.manager import DialogueManager
+from app.dialogue.schemas import PendingQuestion
 from app.configs.loader import load_runtime_config
 from app.errors import ChatFlowError
 from app.intent.schemas import IntentResult
@@ -17,8 +20,9 @@ from app.retrieval.schemas import SemanticLookup
 from app.retrieval.service import DisabledSemanticAnswerService, SemanticAnswerService
 from app.rules.engine import RouteDecision, RuleEngine
 from app.rules.quick_reply import QuickReply, QuickReplyMatcher
+from app.rules.local_routing import LocalRoutingConfigRegistry
 from app.schemas import ChatHistoryItem
-from app.session.store import ConversationState, InMemorySessionStore, SessionStore
+from app.session.store import ConversationState, InMemorySessionStore, SessionStore, bind_owner
 from app.slots.extractor import SlotExtractor
 from app.slots.manager import SlotManager
 from app.slots.schemas import SlotValue
@@ -69,6 +73,7 @@ class CustomerServiceOrchestrator:
         semantic_answer_service: SemanticAnswerService | None = None,
         prompt_registry: PromptRegistry | None = None,
         mcp_tool_client: McpToolClient | None = None,
+        local_routing_registry: LocalRoutingConfigRegistry | None = None,
     ) -> None:
         self.settings = settings
         self.session_store = session_store or InMemorySessionStore()
@@ -90,9 +95,19 @@ class CustomerServiceOrchestrator:
             self.slot_manager,
             confidence_threshold=settings.understanding_confidence_threshold,
         )
-        self.quick_reply_matcher = QuickReplyMatcher()
+        self.quick_reply_matcher = QuickReplyMatcher(local_routing_registry)
         self.tool_registry = ToolRegistry(settings)
         self.answer_generator = AnswerGenerator(settings, self.prompt_registry)
+        self.dialogue_manager = DialogueManager(
+            self.understanding_service, self.mcp_tool_client, self.tool_argument_resolver,
+            settings.redis_session_ttl_seconds,
+            settings.understanding_confidence_threshold,
+        )
+
+    def match_quick_reply(self, message: str) -> QuickReply | None:
+        """同步识别无需外部依赖的确定性回复，供SSE入口抢先发送首包。"""
+        preprocess = self.preprocessor.normalize(message)
+        return self.quick_reply_matcher.match(preprocess.normalized_text)
 
     async def handle(
         self,
@@ -102,22 +117,47 @@ class CustomerServiceOrchestrator:
         conversation_id: str | None = None,
         user_id: str | None = None,
         on_answer_chunk: AnswerChunkCallback | None = None,
+        request_id: str | None = None,
+        state: ConversationState | None = None,
+    ) -> ChatOrchestrationResult:
+        session_id = session_id or str(uuid.uuid4())
+        user_id = user_id or self.settings.demo_user_id
+        async with timed_lock(self.session_store.lock(session_id)):
+            return await self._handle_locked(
+                message, session_id, history, conversation_id, user_id,
+                on_answer_chunk, request_id, state,
+            )
+
+    @timed("orchestration.total")
+    async def _handle_locked(
+        self,
+        message: str,
+        session_id: str | None,
+        history: list[ChatHistoryItem],
+        conversation_id: str | None = None,
+        user_id: str | None = None,
+        on_answer_chunk: AnswerChunkCallback | None = None,
+        request_id: str | None = None,
+        state: ConversationState | None = None,
     ) -> ChatOrchestrationResult:
         """处理用户的一轮输入，并异步读写Redis或内存会话。"""
         started_at = time.perf_counter()
         current_session_id = session_id or str(uuid.uuid4())
-        state = await self.session_store.get_or_create(
+        state = state or await self.session_store.get_or_create(
             current_session_id,
             conversation_id=conversation_id,
             user_id=user_id,
         )
+        if state.session_id != current_session_id:
+            raise ValueError("预加载上下文与会话不匹配")
+        bind_owner(state, conversation_id, user_id)
 
         # 1. 预处理只做文本清洗、敏感词识别和格式明确的基础实体抽取。
         preprocess = self.preprocessor.normalize(message)
 
         # “不查了”等完整短句只取消当前待补参数的 Tool；“取消订单”等业务表达不会
         # 在这里命中，仍交给正常意图理解判断。
-        if state.active_tool:
+        if state.active_tool and state.tool_status not in {"executing", "uncertain"}:
             cancellation = self.quick_reply_matcher.match_pending_cancellation(
                 preprocess.normalized_text
             )
@@ -149,6 +189,8 @@ class CustomerServiceOrchestrator:
                 intent=quick_reply.intent,
                 confidence=1.0,
                 needs_clarification=False,
+                emotion="negative" if quick_reply.intent == "complaint" else "normal",
+                route_type="direct",
                 source="keyword",
             )
             return await self._complete_quick_reply(
@@ -171,6 +213,13 @@ class CustomerServiceOrchestrator:
             state=state,
         )
         intent = understanding.to_intent_result()
+        if understanding.dialogue_answer and not preprocess.sensitive and understanding.risk_level != "high":
+            return await self._complete_quick_reply(
+                QuickReply(intent.intent, understanding.dialogue_answer, (),
+                           f"dialogue:{understanding.dialogue_act}", "clarify"),
+                "local-dialogue", started_at, current_session_id, message, state,
+                preprocess, understanding, on_answer_chunk,
+            )
 
         # 精确短句没有命中时，DeepSeek仍可识别更自然的寒暄、身份或能力表达。
         # 这三类意图使用同一套标准话术直接回复，不再调用第二次回答模型。
@@ -190,7 +239,7 @@ class CustomerServiceOrchestrator:
 
         # 当前 Tool 只代表“正在等待参数的任务”。模型明确识别出另一项业务时终止
         # 旧任务；unknown、低置信度和寒暄不会误清理待办状态。
-        self._clear_active_tool_on_explicit_switch(state, understanding)
+        self.dialogue_manager.switch(state, understanding)
         # 3. 正则继续负责订单号、手机号等精确字段；LLM负责活动名称等语义字段。
         #    exact_slots后合并，因此模型抄错编号时，正则结果具有更高优先级。
         extraction_intent = intent.intent
@@ -200,6 +249,8 @@ class CustomerServiceOrchestrator:
         semantic_slots = self._semantic_slot_values(understanding, preprocess.raw_text)
         exact_slots = self.slot_extractor.extract(preprocess, extraction_intent)
         extracted_slots = {**semantic_slots, **exact_slots}
+        if understanding.dialogue_act == "correct":
+            extracted_slots = {}
 
         # 用户第二轮可能只补充订单号等槽位。关键词降级模式容易把“订单号”误判成
         # 订单查询，因此只要该槽位属于上一轮意图，就继续原流程；真实LLM给出的明确
@@ -221,7 +272,10 @@ class CustomerServiceOrchestrator:
             )
 
         # 4. SlotManager仍负责白名单过滤、格式校验和多轮槽位合并。
-        state = self.slot_manager.merge(state, intent.intent, extracted_slots)
+        if understanding.route_type == "knowledge" and state.active_tool:
+            state.touch()
+        else:
+            state = self.slot_manager.merge(state, intent.intent, extracted_slots)
 
         # MCP Tool Schema成为动态业务参数的唯一来源。会话中保存参数，支持用户下一轮
         # 只补订单号；切换工具时清空旧参数，避免把上一笔业务数据带到新工具。
@@ -247,6 +301,14 @@ class CustomerServiceOrchestrator:
                 )
             ),
         )
+        if understanding.route_type == "knowledge" and decision.action == "ask_slot":
+            # knowledge_query是统一检索路由，不属于旧YAML槽位配置。意图和风险检查
+            # 已完成后应直接检索，不能因为SlotManager查不到配置而错误追问参数。
+            decision = RouteDecision(
+                action="generate",
+                suggestions=decision.suggestions,
+                reason="knowledge_route_ready",
+            )
         if (
             understanding.route_type in {"tool", "composite"}
             and understanding.tool_name
@@ -258,6 +320,9 @@ class CustomerServiceOrchestrator:
             decision = self._decide_mcp_route(state, understanding)
         if decision.action != "generate":
             provider = self._provider()
+            # 追问、澄清等固定回答立即交给流式输出任务；存储写入不阻塞页面显示。
+            if on_answer_chunk and decision.answer:
+                await on_answer_chunk(decision.answer)
             await self.session_store.save(state)
             self._log_trace(
                 started_at=started_at,
@@ -301,6 +366,7 @@ class CustomerServiceOrchestrator:
                     current_session_id,
                     state,
                     understanding.tool_name,
+                    request_id,
                 )
             if understanding.route_type == "legacy":
                 return await self._call_business_tool(current_session_id, state)
@@ -382,6 +448,16 @@ class CustomerServiceOrchestrator:
                     actor_id=current_session_id,
                     lookup=semantic_lookup,
                 )
+        resume_question = None
+        if tool_result and tool_result.success and state.dialogue.suspended:
+            resume_question = state.dialogue.suspended[-1].pending
+        elif knowledge_requested and not mcp_requested and state.active_tool:
+            resume_question = state.dialogue.pending
+        if resume_question and resume_question.answer:
+            suffix = "\n" + resume_question.answer
+            generate_result.answer += suffix
+            if on_answer_chunk:
+                await on_answer_chunk(suffix)
         self._log_trace(
             started_at=started_at,
             session_id=current_session_id,
@@ -440,7 +516,7 @@ class CustomerServiceOrchestrator:
         """统一完成快捷回复的流式输出、会话保存和日志埋点。"""
         intent = understanding.to_intent_result()
         decision = RouteDecision(
-            action="quick_reply",
+            action=quick_reply.action,
             answer=quick_reply.answer,
             suggestions=list(quick_reply.suggestions),
             reason=quick_reply.reason,
@@ -479,6 +555,7 @@ class CustomerServiceOrchestrator:
             understanding=understanding,
         )
 
+    @timed("understanding.total")
     async def _understand_with_pending_tool(
         self,
         preprocess: PreprocessResult,
@@ -486,61 +563,9 @@ class CustomerServiceOrchestrator:
         state: ConversationState,
     ) -> UnderstandingResult:
         """优先续填当前 Tool 参数，必要时才回到完整意图识别。"""
-        current_slots = {code: slot.value for code, slot in state.slots.items()}
-        if state.active_tool and self.mcp_tool_client is not None:
-            definition = self.mcp_tool_client.get_tool(state.active_tool)
-            if definition is not None:
-                missing = self.tool_argument_resolver.missing_fields(
-                    definition,
-                    state.tool_arguments,
-                )
-                # 旧版本会在成功调用后把完整参数留在Redis，且没有tool_status。这样
-                # 的状态不可能再处于“等待参数”，首次读到时按已完成任务迁移并清理。
-                if state.tool_status is None:
-                    if missing:
-                        state.tool_status = "awaiting_args"
-                    else:
-                        self._complete_active_tool(state, state.active_tool)
-                if missing:
-                    resolution = self.tool_argument_resolver.resolve_structured(
-                        preprocess.normalized_text,
-                        definition,
-                        state.tool_arguments,
-                    )
-                    if resolution.matched:
-                        return UnderstandingResult(
-                            intent=state.active_tool,
-                            confidence=0.99,
-                            requires_tool=True,
-                            route_type="tool",
-                            tool_name=state.active_tool,
-                            tool_arguments=resolution.arguments,
-                            source="keyword",
-                        )
-
-                    pending_understander = getattr(
-                        self.understanding_service,
-                        "understand_pending_tool",
-                        None,
-                    )
-                    if callable(pending_understander):
-                        pending = await pending_understander(
-                            message=preprocess.normalized_text,
-                            history=history,
-                            current_intent=state.current_intent,
-                            current_slots=current_slots,
-                            current_tool=state.active_tool,
-                        )
-                        if pending is not None:
-                            return pending
-
-        return await self.understanding_service.understand(
-            message=preprocess.normalized_text,
-            history=history,
-            current_intent=state.current_intent,
-            current_slots=current_slots,
-            current_tool=state.active_tool,
-        )
+        if preprocess.sensitive:
+            return UnderstandingResult(intent="unknown", risk_level="high", source="keyword")
+        return await self.dialogue_manager.understand(preprocess.normalized_text, state, history)
 
     def _semantic_slot_values(
         self,
@@ -644,52 +669,26 @@ class CustomerServiceOrchestrator:
         )
         for name, value in safe_model_arguments.items():
             state.tool_arguments[name] = value
+        self.dialogue_manager.record_arguments(state, safe_model_arguments)
+        if understanding.knowledge_query:
+            state.dialogue.knowledge_query = understanding.knowledge_query
 
         properties = definition.input_schema.get("properties", {})
         for slot_name, slot in extracted_slots.items():
+            if understanding.dialogue_act == "correct":
+                # The generic extractor may have picked the negated OLD identifier.
+                continue
             if not slot.validated:
                 continue
             camel_name = self._snake_to_camel(slot_name)
             if camel_name in properties:
                 state.tool_arguments[camel_name] = slot.value
 
-    def _clear_active_tool_on_explicit_switch(
-        self,
-        state: ConversationState,
-        understanding: UnderstandingResult,
-    ) -> None:
-        """明确的新业务终止旧待办；含糊输入继续保留上下文等待澄清。"""
-        if not state.active_tool:
-            return
-        if (
-            understanding.tool_name == state.active_tool
-            and understanding.route_type in {"tool", "composite"}
-        ):
-            return
-        if (
-            understanding.intent == "unknown"
-            or understanding.route_type == "unknown"
-            or understanding.needs_clarification
-            or understanding.confidence < self.settings.understanding_confidence_threshold
-        ):
-            return
-        self._clear_active_tool(state)
+    def _clear_active_tool(self, state: ConversationState) -> None:
+        self.dialogue_manager.clear(state)
 
-    @staticmethod
-    def _clear_active_tool(state: ConversationState) -> None:
-        """结束当前待处理 Tool，同时销毁尚未消费的业务参数。"""
-        state.active_tool = None
-        state.tool_status = None
-        state.tool_arguments.clear()
-
-    def _complete_active_tool(
-        self,
-        state: ConversationState,
-        tool_name: str,
-    ) -> None:
-        """成功调用后只保留 Tool 名作为历史上下文，不保留上次业务参数。"""
-        state.last_tool = tool_name
-        self._clear_active_tool(state)
+    def _complete_active_tool(self, state: ConversationState, tool_name: str) -> None:
+        self.dialogue_manager.complete(state)
 
     def _decide_mcp_route(
         self,
@@ -714,6 +713,7 @@ class CustomerServiceOrchestrator:
             if not str(state.tool_arguments.get(field, "")).strip()
         ]
         if not missing:
+            state.dialogue.pending = None
             return RouteDecision(
                 action="generate",
                 reason=(
@@ -723,8 +723,18 @@ class CustomerServiceOrchestrator:
                 ),
             )
 
+        missing.sort(key=lambda name: name == "confirmed")
         field = missing[0]
         properties = definition.input_schema.get("properties", {})
+        if field == "confirmed" and properties.get(field, {}).get("type") == "boolean":
+            summary = "，".join(f"{k}={v}" for k, v in state.tool_arguments.items() if not k.lower().endswith("token"))
+            question = f"请确认是否提交本次操作（{summary}）。确认后将正式办理。"
+            state.dialogue.pending = PendingQuestion(kind="confirmation", field=field, answer=question)
+            return RouteDecision(action="ask_slot", answer=question, reason="awaiting_explicit_confirmation")
+        enum = properties.get(field, {}).get("enum")
+        if isinstance(enum, list) and 1 <= len(enum) <= 20 and all(isinstance(v, str) for v in enum):
+            question = self.dialogue_manager.ask_selection(state, field, enum)
+            return RouteDecision(action="ask_slot", answer=question, reason=f"select_mcp_argument:{field}")
         description = str(properties.get(field, {}).get("description", "")).strip()
         if field == "orderId":
             question = "请提供需要查询的订单号。"
@@ -732,6 +742,7 @@ class CustomerServiceOrchestrator:
             question = f"为了继续办理，请提供{description}。"
         else:
             question = f"为了继续办理，请补充参数：{field}。"
+        self.dialogue_manager.ask(state, field, question)
         return RouteDecision(
             action="ask_slot",
             answer=question,
@@ -743,17 +754,27 @@ class CustomerServiceOrchestrator:
         session_id: str,
         state: ConversationState,
         tool_name: str,
+        request_id: str | None = None,
     ) -> ToolResult:
         """通过MCP调用Java Tool；连接不可用时订单查询降级到原REST适配器。"""
         if self.mcp_tool_client is None:
             return ToolResult.skipped(tool_name, "MCP客户端尚未初始化。")
+        confirmed_operation = state.tool_arguments.get("confirmed") == "true"
+        if confirmed_operation:
+            state.tool_status = "executing"
+            await self.session_store.save(state)
         result = await self.mcp_tool_client.call_tool(
             tool_name,
             state.tool_arguments,
             session_id=session_id,
             user_id=state.user_id or self.settings.demo_user_id,
-            request_id=str(uuid.uuid4()),
+            request_id=str(uuid.uuid5(uuid.NAMESPACE_URL, f"{session_id}:{request_id}:{tool_name}")) if request_id else str(uuid.uuid4()),
         )
+        if confirmed_operation:
+            state.tool_arguments.pop("confirmed", None)
+            if not result.success:
+                state.tool_status = "uncertain"
+                await self.session_store.save(state)
         if result.error_code == "TOOL_SKIPPED" and tool_name == "order_query":
             fallback = await self._call_business_tool(session_id, state)
             return fallback or result
@@ -840,6 +861,9 @@ class CustomerServiceOrchestrator:
             sensitive=preprocess.sensitive,
             understanding_source=understanding.source,
             understanding_error=understanding.error_message,
+            dialogue_act=understanding.dialogue_act,
+            dialogue_frame_id=state.dialogue.frame_id,
+            pending_field=state.dialogue.pending.field if state.dialogue.pending else None,
         )
         log_chat_trace(trace)
 

@@ -4,10 +4,24 @@ import re
 from dataclasses import dataclass, field
 from typing import Any
 
+from jsonschema import Draft202012Validator, SchemaError
 from app.tools.mcp_client import McpToolDefinition
 
 
-_INTERNAL_ARGUMENTS = {"sessionId", "userId", "requestId"}
+def coerce_argument(value: Any, schema: dict[str, Any]) -> Any:
+    """Convert only explicit JSON scalar representations required by the tool schema."""
+    if not isinstance(value, str):
+        return value
+    kind = schema.get("type")
+    if kind == "integer" and re.fullmatch(r"-?\d+", value):
+        return int(value)
+    if kind == "number" and re.fullmatch(r"-?\d+(?:\.\d+)?", value):
+        return float(value)
+    if kind == "boolean" and value.lower() in {"true", "false"}:
+        return value.lower() == "true"
+    return value
+
+_INTERNAL_ARGUMENTS = {"sessionId", "userId", "requestId", "confirmed"}
 _IDENTIFIER_HINTS = ("编号", "单号", "号码", "尾号", "代码", "令牌", "标识")
 _SAFE_FILLER_PATTERN = re.compile(
     r"(?:我(?:的)?|这个|就是|是|为|请|帮我|麻烦|查一下|查询|看一下|"
@@ -154,6 +168,11 @@ class ToolArgumentResolver:
 
     @staticmethod
     def _matches_schema(value: str, schema: dict[str, Any]) -> bool:
+        try:
+            if not Draft202012Validator(schema).is_valid(coerce_argument(value, schema)):
+                return False
+        except (SchemaError, TypeError, ValueError, re.error):
+            return False
         min_length = schema.get("minLength")
         max_length = schema.get("maxLength")
         if isinstance(min_length, int) and len(value) < min_length:

@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.observability.timing import timed
 
 import asyncio
 from collections.abc import Awaitable, Callable
@@ -47,6 +48,7 @@ class AnswerGenerator:
         # CustomerServiceAgent会复用本生成器，因此客户端也可以复用HTTP连接池。
         self._llm: ChatOpenAI | None = None
 
+    @timed("answer.model")
     async def generate(
         self,
         message: str,

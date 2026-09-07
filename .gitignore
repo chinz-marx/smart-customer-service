@@ -33,6 +33,7 @@ frontend/*.log
 frontend/vite.*.log
 
 # Repo/runtime generated caches
+.run-logs/
 .vite/
 .pytest_cache/
 __pycache__/
