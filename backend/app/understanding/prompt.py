@@ -75,7 +75,7 @@ def build_user_payload(
                 "订单说明",
                 "异常处理办法",
             ],
-            "usage": "需要规则、原因、条件或处理办法时设置requires_knowledge=true",
+            "usage": "规则、原因、条件或处理办法使用knowledge；与实时业务同时出现使用composite",
         },
         "recent_history": [
             {"role": item.role, "content": item.content}

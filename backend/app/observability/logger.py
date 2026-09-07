@@ -37,6 +37,9 @@ class ChatTrace:
     sensitive: bool = False
     understanding_source: str = "keyword"
     understanding_error: str | None = None
+    dialogue_act: str | None = None
+    dialogue_frame_id: str | None = None
+    pending_field: str | None = None
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
 
 

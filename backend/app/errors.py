@@ -3,6 +3,10 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 
+class DialogueConflictError(Exception):
+    """Public conflict message; execution must not be retried automatically."""
+
+
 @dataclass(slots=True)
 class ChatFlowError:
     """聊天链路中的可观测错误。

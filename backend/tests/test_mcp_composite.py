@@ -131,6 +131,34 @@ class FakeSemanticAnswerService:
         return False
 
 
+def test_pure_knowledge_route_skips_legacy_slot_check() -> None:
+    """统一知识意图无需YAML槽位，应直接检索并返回审核知识。"""
+    understanding = FakeUnderstandingService(
+        UnderstandingResult(
+            intent="knowledge_query",
+            confidence=0.96,
+            requires_knowledge=True,
+            route_type="knowledge",
+            knowledge_query="订单发货后在哪里查看物流规则",
+            source="llm",
+        )
+    )
+    semantic = FakeSemanticAnswerService()
+    agent = CustomerServiceAgent(
+        Settings(doubao_api_key="YOUR_TEST_KEY"),
+        understanding_service=understanding,
+        semantic_answer_service=semantic,
+    )
+
+    result = asyncio.run(agent.handle("订单发货后在哪里查看物流规则", None, []))
+
+    assert result.intent == "knowledge_query"
+    assert result.decision_action == "generate"
+    assert result.decision_reason == "knowledge_route_ready"
+    assert result.provider == "redis-search:knowledge"
+    assert result.answer == "已发货订单可以在订单详情查看物流节点。"
+
+
 @pytest.fixture
 def settings() -> Settings:
     """关闭真实模型和语义检索连接，测试只使用注入的替身。"""

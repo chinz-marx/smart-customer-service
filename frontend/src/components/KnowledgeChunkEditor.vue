@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue';
-import { Plus, RefreshCw, Sparkles, Trash2 } from '@lucide/vue';
+import { AlignLeft, Plus, RefreshCw, Sparkles, Trash2 } from '@lucide/vue';
 import {
   generateKnowledgeQuestions,
   splitKnowledgeContent,
@@ -18,12 +18,14 @@ interface ChunkDraft {
 }
 
 const props = defineProps<{ content: string; title?: string }>();
+const emit = defineEmits<{ (event: 'update:content', content: string): void }>();
 
 const questionCount = ref(3);
 const chunks = defineModel<ChunkDraft[]>({ required: true });
 const generating = ref(false);
 const generatingChunkId = ref<number | null>(null);
 const generationError = ref('');
+const formatNotice = ref('');
 let draftSequence = 0;
 
 const hasContent = computed(() => Boolean(props.content.trim()));
@@ -56,6 +58,30 @@ async function generateChunks() {
   } finally {
     generating.value = false;
   }
+}
+
+/**
+ * 仅整理排版：统一换行、空行、列表符号和行首空白，不改动规则语义。
+ * 分片内容依赖正文原文，正文变更后要求重新生成，避免发布不一致的分片。
+ */
+function formatContent() {
+  if (!hasContent.value || generating.value) return;
+  const formatted = props.content
+    .replace(/\r\n?/g, '\n')
+    .split('\n')
+    .map((line) => line.trim().replace(/^[•·●▪◦]\s*/, '- '))
+    .map((line) => line.replace(/^(\d+)\s*[、.)）]\s*/, '$1. '))
+    .join('\n')
+    .replace(/[ \t]+\n/g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+  if (formatted === props.content) {
+    formatNotice.value = '内容格式已规范，无需调整';
+    return;
+  }
+  emit('update:content', formatted);
+  chunks.value = [];
+  formatNotice.value = '已格式化内容，请重新生成分片';
 }
 
 function createChunk(content = '', questions: string[] = []): ChunkDraft {
@@ -142,10 +168,14 @@ function nextDraftId(): number {
           <Sparkles v-else :size="15" />
           {{ generating ? '生成中' : '生成分片' }}
         </button>
+        <button class="chunk-format" type="button" :disabled="!hasContent || generating || generatingChunkId !== null" @click="formatContent">
+          <AlignLeft :size="15" />格式整理
+        </button>
       </div>
     </div>
 
     <div v-if="generationError" class="chunk-error">{{ generationError }}</div>
+    <div v-else-if="formatNotice" class="chunk-notice">{{ formatNotice }}</div>
 
     <div v-if="!chunks.length" class="chunk-empty">
       填写知识内容后点击“生成分片”，即可预览分片与问法的对应关系
@@ -182,10 +212,12 @@ function nextDraftId(): number {
 .chunk-editor-tools { display: flex; align-items: end; gap: 8px; flex: none; }
 .chunk-editor-tools label { display: flex; align-items: center; gap: 7px; color: #596570; white-space: nowrap; }
 .chunk-editor-tools input { width: 68px; height: 34px; padding: 0 6px; text-align: center; }
-.chunk-generate, .chunk-actions button, .question-add, .chunk-add { min-height: 32px; border: 1px solid #79a8df; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; color: #1664c0; background: #fff; }
-.chunk-generate { padding: 0 12px; font-weight: 650; }
-.chunk-generate:disabled, .chunk-actions button:disabled { cursor: not-allowed; opacity: 0.55; }
+.chunk-generate, .chunk-format, .chunk-actions button, .question-add, .chunk-add { min-height: 32px; border: 1px solid #79a8df; border-radius: 5px; display: inline-flex; align-items: center; justify-content: center; gap: 5px; color: #1664c0; background: #fff; }
+.chunk-generate, .chunk-format { padding: 0 12px; font-weight: 650; }
+.chunk-format { border-color: #b8c5d2; color: #455d72; }
+.chunk-generate:disabled, .chunk-format:disabled, .chunk-actions button:disabled { cursor: not-allowed; opacity: 0.55; }
 .chunk-error { padding: 9px 11px; border: 1px solid #e3b2b2; border-radius: 5px; color: #9f3434; background: #fff8f8; font-size: 12px; }
+.chunk-notice { padding: 8px 11px; border: 1px solid #cddcea; border-radius: 5px; color: #416887; background: #f7fbff; font-size: 12px; }
 .chunk-empty { min-height: 84px; padding: 20px; border: 1px dashed #cfd5db; border-radius: 5px; display: grid; place-items: center; color: #7a8590; background: #fafbfc; font-size: 12px; text-align: center; }
 .chunk-draft { padding: 10px; border: 1px solid #d8dde3; border-radius: 5px; background: #fff; }
 .chunk-draft > header { min-height: 27px; display: flex; align-items: start; justify-content: space-between; gap: 12px; }

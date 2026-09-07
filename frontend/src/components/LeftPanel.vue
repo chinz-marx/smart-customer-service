@@ -74,16 +74,18 @@ function relativeTime(value: string) {
   return new Intl.DateTimeFormat('zh-CN', { month: 'numeric', day: 'numeric' }).format(date);
 }
 
-async function loadHistory(options: { resetLimit?: boolean; more?: boolean } = {}) {
+async function loadHistory(options: { resetLimit?: boolean; more?: boolean; silent?: boolean } = {}) {
   if (options.resetLimit) historyLimit.value = PAGE_SIZE;
   requestController?.abort();
   const controller = new AbortController();
   requestController = controller;
   errorText.value = '';
-  if (options.more) isLoadingMore.value = true;
-  else isLoading.value = true;
+  isLoadingMore.value = Boolean(options.more);
+  isLoading.value = !options.more && !options.silent;
   try {
-    histories.value = await listConversations(historyLimit.value, controller.signal);
+    const result = await listConversations(historyLimit.value, controller.signal);
+    if (requestController !== controller || controller.signal.aborted) return;
+    histories.value = result;
   } catch (error) {
     if (controller.signal.aborted) return;
     errorText.value = error instanceof Error ? error.message : '历史对话加载失败';
@@ -127,7 +129,7 @@ function swapFaq() {
 
 watch(
   () => props.refreshKey,
-  () => void loadHistory(),
+  () => void loadHistory({ silent: true }),
 );
 
 onMounted(() => {
@@ -159,7 +161,7 @@ onBeforeUnmount(() => requestController?.abort());
 
     <section class="panel-section">
       <div class="section-title-row">
-        <h2>历史对话</h2>
+        <h2>历史对话 <span class="history-window-label">近3天</span></h2>
         <button
           class="icon-button refresh"
           :class="{ spinning: isLoading }"
@@ -184,7 +186,7 @@ onBeforeUnmount(() => requestController?.abort());
 
       <div v-else-if="!histories.length" class="history-state history-empty">
         <MessageCircle :size="30" :stroke-width="1.6" aria-hidden="true" />
-        <strong>暂无历史对话</strong>
+        <strong>近3天暂无历史对话</strong>
         <span>发送第一条消息后会保存在这里</span>
       </div>
 

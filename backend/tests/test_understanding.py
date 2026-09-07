@@ -5,9 +5,14 @@ from app.config import Settings
 from app.configs.loader import load_runtime_config
 from app.customer_service import CustomerServiceAgent
 from app.intent.classifier import IntentClassifier
+from app.prompts.defaults import UNDERSTANDING_SYSTEM
 from app.tools.mcp_client import McpToolDefinition
 from app.understanding.prompt import build_user_payload
-from app.understanding.schemas import UnderstandingResult
+from app.understanding.schemas import (
+    UnderstandingModelOutput,
+    UnderstandingResult,
+    understanding_output_json_schema,
+)
 from app.understanding.service import UnderstandingService
 
 
@@ -211,6 +216,8 @@ def test_knowledge_route_uses_generic_knowledge_intent() -> None:
         """{
           "intent": "activity_rules",
           "confidence": 0.94,
+          "slots": null,
+          "tool_arguments": null,
           "requires_knowledge": true,
           "route_type": "knowledge",
           "knowledge_query": "活动什么时候结束"
@@ -219,6 +226,31 @@ def test_knowledge_route_uses_generic_knowledge_intent() -> None:
 
     assert result.intent == "knowledge_query"
     assert result.route_type == "knowledge"
+    assert result.slots == {}
+    assert result.tool_arguments == {}
+
+
+def test_pure_knowledge_route_discards_stale_tool_fields() -> None:
+    """纯知识标记优先，旧模型误带的Tool字段不能触发Tool校验或执行。"""
+    service = UnderstandingService(Settings(understanding_mode="keyword"))
+
+    result = service._parse_result(
+        """{
+          "intent": "points_rules",
+          "confidence": 0.91,
+          "requires_tool": false,
+          "requires_knowledge": true,
+          "route_type": "legacy",
+          "tool_name": "stale_unknown_tool",
+          "tool_arguments": {"stale": "value"},
+          "knowledge_query": "积分有效期多久"
+        }"""
+    )
+
+    assert result.intent == "knowledge_query"
+    assert result.route_type == "knowledge"
+    assert result.tool_name is None
+    assert result.tool_arguments == {}
 
 
 def test_keyword_slot_followup_keeps_active_mcp_tool() -> None:
@@ -292,8 +324,8 @@ def test_keyword_fallback_keeps_current_intent_for_slot_only_message() -> None:
         assert result.source == "keyword"
 
 
-def test_hybrid_mode_parses_llm_json(monkeypatch) -> None:
-    """LLM返回的JSON应被解析为统一结果，而不是把自然语言直接交给业务层。"""
+def test_hybrid_mode_expands_compact_model_output(monkeypatch) -> None:
+    """六字段模型结果应在代码中扩展为内部统一结构。"""
     settings = Settings(
         doubao_api_key="REAL_TEST_KEY",
         understanding_api_key="REAL_TEST_KEY",
@@ -302,30 +334,144 @@ def test_hybrid_mode_parses_llm_json(monkeypatch) -> None:
     service = UnderstandingService(settings)
 
     async def fake_invoke_llm(**kwargs) -> str:
-        return """```json
-        {
-          "intent": "reward_not_received",
+        return """{
+          "route": "knowledge",
+          "tool": null,
+          "arguments": {},
+          "knowledge_query": "618消费返现活动规则",
           "confidence": 0.96,
-          "slots": {"activity_name": "618消费返现"},
-          "emotion": "normal",
-          "risk_level": "low",
-          "needs_clarification": false
-        }
-        ```"""
+          "risk": "low"
+        }"""
 
     monkeypatch.setattr(service, "_invoke_llm", fake_invoke_llm)
     result = asyncio.run(
         service.understand(
-            message="618那笔钱还没给我",
+            message="618消费返现活动有什么规则",
             history=[],
             current_intent=None,
             current_slots={},
         )
     )
 
-    assert result.intent == "reward_not_received"
-    assert result.slots == {"activity_name": "618消费返现"}
+    assert result.intent == "knowledge_query"
+    assert result.route_type == "knowledge"
+    assert result.requires_knowledge is True
+    assert result.requires_tool is False
+    assert result.slots == {}
     assert result.source == "llm"
+
+
+def test_understanding_model_schema_contains_only_six_fields() -> None:
+    """供应商输出协议不能重新膨胀为内部兼容结构。"""
+    schema = UnderstandingModelOutput.model_json_schema()
+
+    assert set(schema["properties"]) == {
+        "route",
+        "tool",
+        "arguments",
+        "knowledge_query",
+        "confidence",
+        "risk",
+    }
+    assert set(schema["required"]) == set(schema["properties"])
+    assert schema["additionalProperties"] is False
+    assert understanding_output_json_schema()["properties"]["arguments"]["additionalProperties"] is True
+    assert len(UNDERSTANDING_SYSTEM) < 900
+    assert "requires_tool" not in UNDERSTANDING_SYSTEM
+    assert "requires_knowledge" not in UNDERSTANDING_SYSTEM
+    assert "route_type" not in UNDERSTANDING_SYSTEM
+    assert "slots" not in UNDERSTANDING_SYSTEM
+
+
+def test_compact_system_route_discards_irrelevant_fields() -> None:
+    """route是唯一执行依据，系统路由中误带的Tool和知识字段应由代码清理。"""
+    service = UnderstandingService(Settings(understanding_mode="keyword"))
+
+    result = service._parse_result(
+        {
+            "route": "greeting",
+            "tool": "hallucinated_tool",
+            "arguments": {"orderId": "ORDER_123456"},
+            "knowledge_query": "不应检索",
+            "confidence": 0.98,
+            "risk": "low",
+        }
+    )
+
+    assert result.intent == "greeting"
+    assert result.route_type == "system"
+    assert result.tool_name is None
+    assert result.tool_arguments == {}
+    assert result.knowledge_query is None
+
+
+def test_invoke_llm_uses_native_json_schema(monkeypatch) -> None:
+    """理解模型必须通过LangChain的json_schema响应格式调用。"""
+    structured_calls: list[tuple[object, str, bool]] = []
+
+    class FakeStructuredLlm:
+        async def ainvoke(self, messages):
+            assert len(messages) == 2
+            return {
+                "route": "knowledge",
+                "tool": None,
+                "arguments": {},
+                "knowledge_query": "退款多久到账",
+                "confidence": 0.93,
+                "risk": "low",
+            }
+
+    class FakeLlm:
+        def with_structured_output(self, schema, *, method, strict):
+            structured_calls.append((schema, method, strict))
+            return FakeStructuredLlm()
+
+    service = UnderstandingService(Settings(understanding_mode="keyword"))
+    monkeypatch.setattr(service, "_get_llm", lambda: FakeLlm())
+
+    output = asyncio.run(
+        service._invoke_llm(
+            message="退款多久到账",
+            history=[],
+            current_intent=None,
+            current_slots={},
+        )
+    )
+
+    assert len(structured_calls) == 1
+    structured_schema, method, strict = structured_calls[0]
+    assert set(structured_schema["properties"]) == {
+        "route",
+        "tool",
+        "arguments",
+        "knowledge_query",
+        "confidence",
+        "risk",
+    }
+    assert structured_schema["properties"]["arguments"]["additionalProperties"] is True
+    assert method == "json_schema"
+    assert strict is False
+    assert output.route == "knowledge"
+    assert output.knowledge_query == "退款多久到账"
+
+
+def test_deepseek_flash_uses_responses_api_for_json_schema() -> None:
+    """DeepSeek只有Responses API支持json_schema，不能误发到Chat Completions。"""
+    flash_service = UnderstandingService(
+        Settings(
+            understanding_base_url="https://api.deepseek.com",
+            understanding_model="deepseek-v4-flash",
+        )
+    )
+    pro_service = UnderstandingService(
+        Settings(
+            understanding_base_url="https://api.deepseek.com",
+            understanding_model="deepseek-v4-pro",
+        )
+    )
+
+    assert flash_service._requires_responses_api("deepseek-v4-flash") is True
+    assert pro_service._requires_responses_api("deepseek-v4-pro") is False
 
 
 def test_hybrid_mode_falls_back_when_llm_output_is_invalid(monkeypatch) -> None:
@@ -511,8 +657,8 @@ def test_generic_activity_word_does_not_trigger_tool() -> None:
     assert "请提供" in result.answer
 
 
-def test_explicit_handoff_is_not_blocked_by_clarification_flag() -> None:
-    """模型已识别转人工时，即使同时要求澄清，也应优先执行人工策略。"""
+def test_understood_handoff_returns_unavailable_even_with_clarification_flag() -> None:
+    """未命中本地短语但模型识别人工诉求时，也不能创建尚未实现的人工工单。"""
     understanding = FakeUnderstandingService(
         UnderstandingResult(
             intent="human_handoff",
@@ -526,10 +672,10 @@ def test_explicit_handoff_is_not_blocked_by_clarification_flag() -> None:
         understanding_service=understanding,
     )
 
-    result = asyncio.run(agent.handle("我要找真人客服", None, []))
+    result = asyncio.run(agent.handle("我希望由工作人员继续处理", None, []))
 
-    assert result.decision_action == "handoff"
-    assert "转人工" in result.answer
+    assert result.decision_action == "human_unavailable"
+    assert result.answer == "当前人工坐席繁忙，已记录您的问题，请稍后再试"
 
 def test_llm_high_risk_is_forced_to_handoff() -> None:
     """即使意图和槽位齐全，高风险结果也必须在调用Tool前转人工。"""

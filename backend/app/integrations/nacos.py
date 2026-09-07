@@ -3,6 +3,7 @@ from __future__ import annotations
 import logging
 import json
 import time
+from dataclasses import dataclass
 from typing import Any
 from urllib.parse import urljoin, urlunsplit
 
@@ -12,6 +13,14 @@ from app.config import Settings
 
 
 logger = logging.getLogger("smart_customer_service.nacos")
+
+
+@dataclass(frozen=True, slots=True)
+class NacosConfigSnapshot:
+    """Nacos配置中心的一次不可变读取结果。"""
+
+    content: str
+    md5: str
 
 
 class NacosClient:
@@ -105,6 +114,63 @@ class NacosClient:
             if isinstance(value, str) and value.strip():
                 return value
         return None
+
+    async def get_config(
+        self,
+        *,
+        data_id: str,
+        group_name: str,
+    ) -> NacosConfigSnapshot | None:
+        """从Nacos 3.x配置中心读取一个已知配置项。
+
+        Nacos 3.x HTTP Client API不提供配置监听，因此上层按MD5轮询；这里仅负责
+        单次读取，不在聊天主链路中调用。
+        """
+        response = await self._request(
+            "GET",
+            "/nacos/v3/client/cs/config",
+            params={
+                "namespaceId": self.settings.nacos_namespace,
+                "groupName": group_name,
+                "dataId": data_id,
+            },
+        )
+        if response.status_code == 404:
+            return None
+        response.raise_for_status()
+        data = self._unwrap(response.json())
+        if not isinstance(data, dict):
+            return None
+        content = data.get("content")
+        if not isinstance(content, str) or not content.strip():
+            return None
+        md5 = str(data.get("md5") or "").strip()
+        return NacosConfigSnapshot(content=content, md5=md5)
+
+    async def publish_config(
+        self,
+        *,
+        data_id: str,
+        group_name: str,
+        content: str,
+        description: str,
+        config_type: str = "json",
+    ) -> None:
+        """通过Nacos 3.x Admin API创建或更新配置中心内容。"""
+        response = await self._request(
+            "POST",
+            "/nacos/v3/admin/cs/config",
+            data={
+                "namespaceId": self.settings.nacos_namespace,
+                "groupName": group_name,
+                "dataId": data_id,
+                "content": content,
+                "desc": description,
+                "type": config_type,
+                "appName": "smart-customer-service",
+            },
+        )
+        self._require_api_success(response, f"发布配置{group_name}/{data_id}")
 
     async def discover_mcp_url(self, server_name: str) -> str | None:
         """从 Nacos AI Registry 查找指定 MCP Server 的 Streamable HTTP 地址。"""

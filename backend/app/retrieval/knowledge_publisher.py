@@ -15,6 +15,12 @@ from app.config import Settings
 from app.retrieval.chunk_splitter import KnowledgeTextSplitter, TextChunk
 from app.retrieval.embedding import DoubaoEmbeddingClient, vector_to_bytes
 
+
+def is_customer_faq_category(category: str) -> bool:
+    """仅页面配置的FAQ分类写入客服常见问题精确映射。"""
+    return category.strip().casefold() == "faq"
+
+
 class KnowledgeQuestionInput(BaseModel):
     """Java数据库中的标准问法身份和展示文本。"""
 
@@ -123,7 +129,16 @@ class RedisKnowledgePublisher:
         self._splitter = KnowledgeTextSplitter()
 
     async def initialize(self) -> None:
-        self._redis = Redis.from_url(self.settings.redis_url, decode_responses=False)
+        self._redis = Redis.from_url(
+            self.settings.redis_url,
+            decode_responses=False,
+            # 发布连接可能长时间空闲；TCP keepalive防止NAT或防火墙静默回收连接。
+            socket_keepalive=True,
+            health_check_interval=30,
+            socket_connect_timeout=5,
+            socket_timeout=8,
+            retry_on_timeout=True,
+        )
         await self._redis.ping()
 
     async def close(self) -> None:
@@ -193,6 +208,7 @@ class RedisKnowledgePublisher:
         old_keys = set(await client.smembers(key_set))
         new_keys: list[bytes] = []
         response_chunks: list[PublishedChunk] = []
+        publish_question_map = is_customer_faq_category(payload.category)
 
         pipeline = client.pipeline(transaction=True)
         for chunk, vector_blob, question_vectors in embedded:
@@ -231,7 +247,8 @@ class RedisKnowledgePublisher:
                     f"{question_input.question_id}"
                 )
                 new_keys.append(question_key.encode("utf-8"))
-                new_keys.append(mapping_key.encode("utf-8"))
+                if publish_question_map:
+                    new_keys.append(mapping_key.encode("utf-8"))
                 pipeline.hset(question_key, mapping={
                     # 多个别名共享稳定source_id，命中后统一返回所属原子分片。
                     "id": f"{payload.knowledge_id}:{payload.version_id}:{chunk.chunk_no}",
@@ -250,7 +267,8 @@ class RedisKnowledgePublisher:
                     "index_version": 1,
                     "embedding": question_vector,
                 })
-                pipeline.set(mapping_key, question_key)
+                if publish_question_map:
+                    pipeline.set(mapping_key, question_key)
                 published_questions.append(PublishedQuestion(
                     question_id=question_input.question_id,
                     question_no=question_no,

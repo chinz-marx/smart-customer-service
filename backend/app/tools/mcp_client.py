@@ -1,4 +1,5 @@
 from __future__ import annotations
+from app.observability.timing import timed
 
 import json
 import logging
@@ -197,6 +198,7 @@ class McpToolClient:
         """按名称读取缓存Schema。"""
         return self._tools.get(tool_name or "")
 
+    @timed("tool.mcp")
     async def call_tool(
         self,
         tool_name: str,
@@ -211,7 +213,12 @@ class McpToolClient:
         if definition is None or self._session is None:
             return ToolResult.skipped(tool_name, "MCP业务工具暂时不可用。")
 
-        trusted_arguments = dict(arguments)
+        from app.tools.argument_resolver import coerce_argument
+
+        properties = definition.input_schema.get("properties", {})
+        trusted_arguments = {
+            key: coerce_argument(value, properties.get(key, {})) for key, value in arguments.items()
+        }
         trusted_arguments.update(
             {
                 "sessionId": session_id,

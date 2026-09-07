@@ -2,6 +2,7 @@ from functools import lru_cache
 from pathlib import Path
 from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -52,6 +53,7 @@ class Settings(BaseSettings):
     # 理解阶段位于用户请求主链路，超时后hybrid模式会快速回退关键词识别。
     understanding_timeout_seconds: float = 10.0
     understanding_confidence_threshold: float = 0.65
+    context_candidate_timeout_seconds: float = Field(default=0.5, gt=0, le=5)
 
     # Redis只保存短期编排状态。安装服务后把SESSION_STORE_BACKEND改成redis即可。
     session_store_backend: Literal["memory", "redis"] = "memory"
@@ -91,7 +93,7 @@ class Settings(BaseSettings):
     database_echo: bool = False
     database_auto_create_tables: bool = False
 
-    # 问题学习只收集明确负面信号；原始信号先可靠落库，Embedding和聚类由后台任务异步完成。
+    # 问题学习只收集明确负面信号；原始信号先可靠落库，Embedding和聚类异步完成。
     learning_enabled: bool = False
     # Python进程每天按指定时区执行；多实例通过PostgreSQL advisory lock互斥。
     learning_scheduler_enabled: bool = False
@@ -139,6 +141,11 @@ class Settings(BaseSettings):
     nacos_password: str = ""
     nacos_prompt_label: str = "stable"
     nacos_timeout_seconds: float = 5.0
+    # 明确人工诉求和投诉属于确定性本地路由。规则保存在Nacos配置中心，Python周期
+    # 比较MD5并原子替换内存快照，聊天请求本身不会访问Nacos。
+    nacos_local_rule_data_id: str = "smart-customer-local-routing.json"
+    nacos_local_rule_group: str = "SMART_CUSTOMER_SERVICE"
+    nacos_local_rule_refresh_seconds: float = 5.0
 
     # Python是MCP Host/Client，Java是MCP Server。Nacos发现失败时使用本地URL降级。
     mcp_enabled: bool = False
