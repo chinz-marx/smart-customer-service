@@ -13,5 +13,6 @@ def disable_real_model_calls(request: pytest.FixtureRequest, monkeypatch: pytest
         return
 
     monkeypatch.setenv("DOUBAO_API_KEY", "YOUR_TEST_KEY")
+    monkeypatch.setenv("ASR_API_KEY", "YOUR_TEST_KEY")
     monkeypatch.setenv("UNDERSTANDING_API_KEY", "YOUR_TEST_KEY")
     monkeypatch.setenv("SEMANTIC_SEARCH_ENABLED", "false")

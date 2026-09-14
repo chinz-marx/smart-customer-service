@@ -42,6 +42,11 @@ function handleConversationUpdated(conversationId: string) {
   historyRefreshKey.value += 1;
 }
 
+function startSpeechInput() {
+  isHistoryDrawerOpen.value = false;
+  chatWorkspaceRef.value?.toggleSpeech();
+}
+
 async function selectFaq(question: FaqQuestion) {
   isHistoryDrawerOpen.value = false;
   await chatWorkspaceRef.value?.answerFaq(question);
@@ -102,6 +107,7 @@ onBeforeUnmount(() => {
         @new-conversation="startNewConversation"
         @close-drawer="isHistoryDrawerOpen = false"
         @select-faq="selectFaq"
+        @start-speech="startSpeechInput"
       />
       <div class="chat-column">
         <button

@@ -38,6 +38,15 @@ class Settings(BaseSettings):
     # LangChain会在网络抖动时自动重试。限制为1次可以兼顾成功率和用户等待时间。
     doubao_max_retries: int = 1
 
+    # 独立的豆包 ASR 新控制台凭证，只允许服务端使用。
+    asr_api_key: str = Field(default="", repr=False)
+    asr_ws_url: str = "wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async"
+    asr_resource_id: str = "volc.seedasr.sauc.duration"
+    asr_max_duration_seconds: int = Field(default=60, ge=1, le=300)
+    asr_max_connections: int = Field(default=16, ge=1, le=256)
+    asr_connect_timeout_seconds: float = Field(default=8, gt=0, le=30)
+    asr_finish_timeout_seconds: float = Field(default=8, gt=0, le=30)
+
     # 知识标准问法默认复用回答模型，也可以通过环境变量单独指定更擅长改写的模型。
     knowledge_question_model: str = ""
     knowledge_question_temperature: float = 0.6

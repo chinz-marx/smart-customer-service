@@ -38,6 +38,7 @@ from app.schemas import (
     MessageResponse,
 )
 from app.tools.mcp_client import McpToolClient
+from app.speech.router import create_speech_router
 
 
 logger = logging.getLogger("smart_customer_service.api")
@@ -144,6 +145,7 @@ def create_app(settings_override: Settings | None = None) -> FastAPI:
 
     app = FastAPI(title=settings.app_name, lifespan=lifespan)
     app.add_middleware(ChatTimingMiddleware)
+    app.include_router(create_speech_router(settings))
     app.include_router(create_knowledge_chunk_router())
     app.include_router(create_knowledge_router(settings))
     app.include_router(create_question_generation_router(settings, prompt_registry))

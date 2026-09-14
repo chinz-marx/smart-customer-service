@@ -29,6 +29,7 @@ const emit = defineEmits<{
   newConversation: [];
   closeDrawer: [];
   selectFaq: [question: FaqQuestion];
+  startSpeech: [];
 }>();
 
 const PAGE_SIZE = 20;
@@ -258,7 +259,7 @@ onBeforeUnmount(() => requestController?.abort());
       </div>
     </section>
 
-    <button class="voice-card" type="button">
+    <button class="voice-card" type="button" @click="emit('startSpeech')">
       <span class="voice-orb" aria-hidden="true"><Mic :size="19" /></span>
       <span>
         <strong>语音助手</strong>
