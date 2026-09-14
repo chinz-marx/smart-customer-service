@@ -84,7 +84,53 @@ Nacos 读取失败时，提示词、本地路由配置和 MCP 地址均有本地
 
 标准问法和知识切片都写入 `idx:cs:knowledge`。知识余弦距离不超过 `0.38` 时命中；命中后直接返回已发布切片，因此线上知识必须能够独立回答一个用户问题。LangCache 只在知识未命中后查询。
 
-## 观测
+## 实时语音输入
+
+聊天页的“语音输入”“点击说话”和左侧“语音助手”使用同一条实时识别链路。
+点击开始后边说边显示文字；点击结束后等待最终结果，可编辑并点击发送。
+录音过程中禁止发送半成品，取消会恢复录音前的输入。单次默认最多60秒。
+
+```text
+AudioWorklet → 16kHz/单声道/PCM S16LE → WebSocket /api/speech/stream
+             → Python → 豆包 bigmodel_async → partial/final → 输入框
+             → 用户确认发送 → POST /api/chat/stream → SSE回答
+```
+
+在 `backend/.env` 中配置 `ASR_API_KEY`，使用豆包语音新控制台的 API Key，
+通过 `X-Api-Key` 鉴权。默认 Resource ID 为 `volc.seedasr.sauc.duration`，
+地址为 `wss://openspeech.bytedance.com/api/v3/sauc/bigmodel_async`。
+后端为每次录音生成独立 UUID 作为供应商请求 ID。该凭证与方舟聊天模型的 Key 独立，
+禁止使用 `VITE_` 变量将其打包到浏览器。
+
+前端真实重采样到16kHz，每100ms发送3200字节二进制音频，发送与识别接收并发进行。
+结束时先清空最后一包音频，再发送结束标记并等待最终响应。识别结果为全文快照，
+更新当前录音文本而非重复追加。Python在内存中转发，不保存音频或识别文本；
+用户发送后才通过既有聊天流程保存文字。日志只包含请求ID、音频长度和耗时。
+
+WebSocket控制消息：开始为
+`{"type":"start","format":"pcm_s16le","sample_rate":16000,"channels":1}`，
+随后发送二进制PCM；停止为 `{"type":"finish"}`，取消为 `{"type":"cancel"}`。
+返回消息类型为 `ready`、`partial`、`final`、`error`。
+
+部署需要HTTPS（本机开发可用localhost/127.0.0.1）以及反向代理的WebSocket Upgrade支持。
+Vite已开启 `/api` 的WebSocket代理。跨域部署时在 `CORS_ORIGINS` 中明确加入网页来源，
+WebSocket路由也会单独校验Origin。`ASR_MAX_CONNECTIONS` 是单个Python进程的并发上限；
+接入现有登录体系时还应增加用户维度额度，不应将Origin校验视为用户鉴权。
+
+验证命令：
+
+```powershell
+# 在backend目录：不访问真实ASR的协议、取消、超时等测试
+uv run pytest tests/test_speech.py -q -p no:cacheprovider
+# 在frontend目录：重采样、文本修正、取消及资源清理测试
+npm run test:speech
+# 在backend目录：显式调用真实ASR，仅使用自行准备的16kHz单声道PCM16测试WAV
+uv run python scripts/check_asr_stream.py --wav path/to/synthetic.wav --expect "订单"
+# 可选通过正在运行的Vite代理验证完整链路
+uv run python scripts/check_asr_stream.py --gateway ws://127.0.0.1:5173/api/speech/stream --wav path/to/synthetic.wav
+```
+
+## 聊天链路观测
 
 `ChatTimingMiddleware` 为 `/api/chat` 和 `/api/chat/stream` 输出 `chat_timing` JSON 日志，覆盖：
 

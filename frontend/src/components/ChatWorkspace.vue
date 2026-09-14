@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue';
+import { useSpeechInput } from '../composables/useSpeechInput';
 import {
   Bot,
   Keyboard,
@@ -55,6 +56,18 @@ const emojis = [
 const messages = ref<ChatMessage[]>([]);
 
 const inputValue = ref('');
+const {
+  state: speechState, active: speechActive, elapsed: speechElapsed,
+  error: speechError, notice: speechNotice,
+  start: startSpeech, finish: finishSpeech, cancel: cancelSpeech,
+} = useSpeechInput(inputValue);
+const toggleSpeech = () => {
+  if (speechState.value === 'recording') finishSpeech();
+  else if (!speechActive.value && !isSending.value && !isHistoryLoading.value && !isFaqAnswering.value) {
+    closeEmojiPicker();
+    void startSpeech();
+  }
+};
 const textareaRef = ref<HTMLTextAreaElement | null>(null);
 const emojiPickerRef = ref<HTMLElement | null>(null);
 const isEmojiPickerOpen = ref(false);
@@ -105,7 +118,7 @@ const handleDocumentPointerDown = (event: PointerEvent) => {
 };
 
 const handleDocumentKeydown = (event: KeyboardEvent) => {
-  if (event.key === 'Escape') closeEmojiPicker();
+  if (event.key === 'Escape') { closeEmojiPicker(); cancelSpeech(); }
 };
 
 onMounted(() => {
@@ -126,6 +139,9 @@ const latestAssistantMessage = computed(() =>
 );
 
 const resetConversationState = () => {
+  cancelSpeech();
+  speechNotice.value = '';
+  speechError.value = '';
   historyRequestController?.abort();
   historyRequestController = null;
   faqRequestController?.abort();
@@ -193,6 +209,9 @@ const openConversation = async (conversation: ConversationSummary) => {
     return false;
   }
 
+  cancelSpeech();
+  speechNotice.value = '';
+  speechError.value = '';
   activeRequestController?.abort();
   activeRequestController = null;
   isSending.value = false;
@@ -246,6 +265,9 @@ const answerFaq = async (question: FaqQuestion) => {
   ) {
     return false;
   }
+  cancelSpeech();
+  speechNotice.value = '';
+  speechError.value = '';
   activeRequestController?.abort();
   activeRequestController = null;
   isSending.value = false;
@@ -321,7 +343,7 @@ const answerFaq = async (question: FaqQuestion) => {
   }
 };
 
-defineExpose({ clearConversation, startNewConversation, openConversation, answerFaq });
+defineExpose({ clearConversation, startNewConversation, openConversation, answerFaq, toggleSpeech });
 
 const currentTime = () =>
   new Intl.DateTimeFormat('zh-CN', {
@@ -376,9 +398,11 @@ const readSseStream = async (
 
 const sendMessage = async (preset?: string) => {
   const content = (preset ?? inputValue.value).trim();
-  if (!content || isSending.value || isHistoryLoading.value || isFaqAnswering.value) return;
+  if (!content || isSending.value || isHistoryLoading.value || isFaqAnswering.value || speechActive.value) return;
 
   errorText.value = '';
+  speechNotice.value = '';
+  speechError.value = '';
   inputValue.value = '';
   closeEmojiPicker();
   // 当前问题通过message字段单独发送，history只携带此前对话，避免模型看到重复输入。
@@ -658,11 +682,15 @@ const handleKeydown = (event: KeyboardEvent) => {
     </section>
 
     <footer class="input-area">
-      <div class="input-tabs" role="tablist" aria-label="输入方式">
-        <button class="active" type="button">
+      <div class="input-tabs" role="group" aria-label="输入方式">
+        <button :class="{ active: !speechActive }" type="button" @click="cancelSpeech(); textareaRef?.focus()">
           <Keyboard :size="17" aria-hidden="true" />文字输入
         </button>
-        <button type="button"><Mic :size="17" aria-hidden="true" />语音输入</button>
+        <button :class="{ active: speechActive }" type="button"
+          :disabled="isSending || isHistoryLoading || isFaqAnswering || speechState === 'connecting' || speechState === 'finishing'"
+          :aria-pressed="speechActive" @click="toggleSpeech">
+          <Mic :size="17" aria-hidden="true" />{{ speechState === 'recording' ? '结束录音' : '语音输入' }}
+        </button>
       </div>
       <div class="composer-row">
         <div class="composer">
@@ -672,6 +700,8 @@ const handleKeydown = (event: KeyboardEvent) => {
             placeholder="请输入您的问题，支持文字或语音..."
             rows="3"
             :disabled="isHistoryLoading || isFaqAnswering"
+            :readonly="speechActive"
+            aria-label="客服消息"
             @keydown="handleKeydown"
           ></textarea>
           <div class="composer-tools">
@@ -683,7 +713,7 @@ const handleKeydown = (event: KeyboardEvent) => {
                 aria-label="选择表情"
                 aria-controls="emoji-picker"
                 :aria-expanded="isEmojiPickerOpen"
-                :disabled="isHistoryLoading || isFaqAnswering"
+                :disabled="isHistoryLoading || isFaqAnswering || speechActive"
                 @click="toggleEmojiPicker"
               >
                 <Smile :size="18" />
@@ -717,17 +747,27 @@ const handleKeydown = (event: KeyboardEvent) => {
             class="send-button"
             type="button"
             aria-label="发送"
-            :disabled="isSending || isHistoryLoading || isFaqAnswering"
+            :disabled="isSending || isHistoryLoading || isFaqAnswering || speechActive || !inputValue.trim()"
             @click="sendMessage()"
           >
             <Send :size="18" :stroke-width="2.2" aria-hidden="true" />
           </button>
         </div>
-        <button class="talk-button" type="button" aria-label="点击说话">
+        <button class="talk-button" :class="{ recording: speechState === 'recording' }" type="button"
+          :aria-label="speechState === 'recording' ? '结束录音' : '点击说话'"
+          :disabled="isSending || isHistoryLoading || isFaqAnswering || speechState === 'connecting' || speechState === 'finishing'"
+          @click="toggleSpeech">
           <span class="large-mic" aria-hidden="true"><Mic :size="24" /></span>
-          <small>点击说话</small>
+          <small>{{ speechState === 'recording' ? '结束录音' : speechState === 'connecting' ? '连接中' : speechState === 'finishing' ? '识别中' : '点击说话' }}</small>
         </button>
       </div>
+      <div v-if="speechNotice || speechActive" class="speech-status" :class="{ recording: speechState === 'recording' }" role="status" aria-live="polite">
+        <span v-if="speechState === 'recording'" class="speech-dot" aria-hidden="true"></span>
+        <span>{{ speechNotice }}</span>
+        <span v-if="speechActive" class="speech-time">{{ speechElapsed }}s</span>
+        <button v-if="speechActive" type="button" @click="cancelSpeech">取消</button>
+      </div>
+      <p v-if="speechError" class="error-tip" role="alert">{{ speechError }}</p>
       <p v-if="errorText" class="error-tip">{{ errorText }}</p>
       <p class="send-tip">按 Enter 发送，Shift + Enter 换行</p>
     </footer>

@@ -9,6 +9,7 @@ export default defineConfig({
       '/api': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
+        ws: true,
       },
       // 独立前缀避免与Python /api冲突，转发时还原成Java的/api路径。
       '/business-api': {

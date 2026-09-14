@@ -528,6 +528,14 @@ button:focus-visible, textarea:focus-visible {
   box-shadow: 0 5px 13px rgba(23, 104, 229, 0.16);
 }
 .talk-button small { font-size: 11px; }
+.talk-button:disabled, .input-tabs button:disabled { cursor: not-allowed; opacity: 0.55; }
+.talk-button.recording { color: var(--cs-danger); }
+.talk-button.recording .large-mic { background: var(--cs-danger); border-color: #ffe8e8; }
+.speech-status { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; margin: 9px 5px 3px; color: var(--cs-muted); font-size: 12px; }
+.speech-status.recording { color: var(--cs-primary); }
+.speech-status button { border: 0; padding: 4px 8px; border-radius: 5px; background: var(--cs-primary-soft); color: var(--cs-primary); cursor: pointer; }
+.speech-time { font-variant-numeric: tabular-nums; }
+.speech-dot { width: 7px; height: 7px; border-radius: 50%; background: var(--cs-danger); }
 .send-tip, .error-tip { margin: 6px 0 0 5px; color: var(--cs-muted); font-size: 10px; }
 .error-tip { color: var(--cs-danger); }
 .disclaimer { flex: 0 0 auto; margin: 0; padding: 6px 0 8px; color: var(--cs-subtle); font-size: 10px; line-height: 1.45; text-align: center; }
